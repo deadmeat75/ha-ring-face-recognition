@@ -1,0 +1,59 @@
+# Paste into ONE automation in Home Assistant: Edit in YAML.
+# Disable the previous press automation if it was created separately.
+id: ring_face_capture_press
+alias: Ring Face - silent capture on motion
+mode: single
+max_exceeded: silent
+triggers:
+  - trigger: state
+    entity_id: binary_sensor.doorbell_camera_motion
+    from: "off"
+    to: "on"
+# Do not admit another capture until 60 seconds after the previous start.
+# The existing automation ID is preserved so this replaces the press version.
+conditions:
+  - condition: template
+    value_template: >-
+      {{ this.attributes.get('last_triggered') is none or
+         as_timestamp(now()) - as_timestamp(this.attributes.get('last_triggered')) >= 60 }}
+actions:
+  - variables:
+      capture_id: "{{ now().strftime('%Y%m%dT%H%M%S%f') }}_{{ trigger.to_state.context.id }}"
+      source_id: "{{ trigger.to_state.context.id }}"
+      pressed_at: "{{ now().isoformat() }}"
+  - repeat:
+      count: 3
+      sequence:
+        - variables:
+            attempt: "{{ repeat.index }}"
+            captured_at: "{{ now().isoformat() }}"
+        - action: camera.snapshot
+          continue_on_error: true
+          target:
+            entity_id: camera.doorbell_camera_live_view
+          data:
+            filename: "/share/ring_face/capture/{{ capture_id }}_{{ attempt }}.jpg"
+        - action: mqtt.publish
+          data:
+            topic: ring_face_recognition/capture
+            qos: 1
+            retain: false
+            payload: >-
+              {{ {'event_id': capture_id, 'source_event_id': source_id,
+                  'pressed_at': pressed_at, 'captured_at': captured_at,
+                  'attempt': attempt | int} | to_json }}
+        - wait_for_trigger:
+            - trigger: mqtt
+              topic: ring_face_recognition/events
+              value_template: "{{ value_json.event_id }}"
+              payload: "{{ capture_id }}"
+          timeout: "00:00:25"
+          continue_on_timeout: true
+        - if:
+            - condition: template
+              value_template: >-
+                {{ wait.trigger is not none and
+                   wait.trigger.payload_json.status != 'capture_failed' }}
+          then:
+            - stop: Visitor event processed
+        - delay: "00:00:03"

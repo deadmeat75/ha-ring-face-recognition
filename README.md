@@ -2,7 +2,7 @@
 
 Requires Home Assistant Core **2026.4 or newer** and a current Supervisor.
 
-An experimental **silent**, press-triggered, local YuNet/SFace recognition app
+An experimental **silent**, motion-triggered, local YuNet/SFace recognition app
 for Generic x86-64 Home Assistant OS. Private enrollment and visitor history use
 Home Assistant ingress and SQLite. Reuses your **existing Mosquitto broker and
 MQTT integration**. No announcements, notifications, continuous video analysis,
@@ -10,7 +10,7 @@ cloud AI requests, or lock operations.
 
 **Not an access-control system.** A match is a similarity result, not proof of
 identity, liveness, or authorization. Ring can return a cached frame. Unique
-filenames, file timestamps, EXIF and a recent press cannot prove source freshness.
+filenames, file timestamps, EXIF and a recent motion event cannot prove source freshness.
 Every observation is `unverified` or `repeated` (and may carry stale-metadata
 warnings); no observation becomes a verified access event.
 
@@ -82,18 +82,28 @@ warnings); no observation becomes a verified access event.
    Run HA's **Check configuration**, then restart Core to apply directory settings
    (an automation-only reload does not apply them). Do not enable the automation
    until the app is started and broker discovery is working.
-7. The package uses only `binary_sensor.doorbell_camera_ding` (`off` → `on`) and
-   `camera.doorbell_camera_live_view`. If the binary sensor fails to represent
-   presses, **replace** its trigger/conditions with
-   [event_trigger_alternative.yaml](home_assistant/event_trigger_alternative.yaml)
-   for `event.doorbell_camera_ding`. Never run both versions. `mode: single`,
-   persistent source IDs, event IDs and a 10-second app debounce suppress duplicates.
-   Closely spaced genuine presses may intentionally coalesce.
-8. Ring the doorbell once. Verify the automation trace, app history and MQTT
-   entities listed below. A failed/missing/invalid snapshot is retried up to three
-   times with bounded file waits and spacing. Normal successful captures stop
-   after the first result. Ring delays can still exhaust attempts. Verify a second
-   physical press creates a different event, then test with Ring unavailable.
+7. The package now triggers on **`binary_sensor.doorbell_camera_motion`**
+   (`off` → `on`) and captures `camera.doorbell_camera_live_view`. Walking up can
+   therefore trigger recognition when Ring reports motion; no bell press is
+   required. Enable motion detection in Ring and check its detection zones.
+   There is a **60-second cooldown from the previous capture start**, plus
+   `mode: single`, persistent IDs and the app's 10-second duplicate suppression.
+   Motion while the sensor remains `on` does not retrigger; another `off` → `on`
+   transition after the cooldown is needed. Motion sensitivity and Ring cloud
+   latency still determine whether/when someone approaching is detected.
+8. Existing installs must update the **HA automation**, not just the app. Replace
+   the existing package file and reload automations, or copy the complete
+   [motion_automation.yaml](home_assistant/motion_automation.yaml) into one
+   automation's **Edit in YAML** screen and save. Never enable both a package
+   automation and a UI copy, or retain a separate press automation. The existing
+   package automation ID is preserved. If the snapshot allowlist from step 6 is
+   not configured yet, apply it and restart Core first.
+   Walk into the motion zone, then verify the trace, app history and MQTT entities.
+   Failed/missing/invalid snapshots retry up to three times. Successful captures
+   stop after the first result. Wait at least 60 seconds and for motion to clear
+   before a second test. For press-only operation instead, replace the trigger
+   entity with `binary_sensor.doorbell_camera_ding`, or use the documented
+   [event trigger alternative](home_assistant/event_trigger_alternative.yaml).
 9. Create a new dashboard using [home_assistant/dashboard.yaml](home_assistant/dashboard.yaml)
    in its raw configuration editor, or merge its view into your dashboard. Native
    cards show current observations and health. Use the authenticated **Ring

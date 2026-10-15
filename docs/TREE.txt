@@ -10,6 +10,7 @@ ha-ring-face-recognition/
   docs/VALIDATION.md
   home_assistant/dashboard.yaml
   home_assistant/event_trigger_alternative.yaml
+  home_assistant/motion_automation.yaml
   home_assistant/ring_face_package.yaml
   pytest.ini
   repository.yaml

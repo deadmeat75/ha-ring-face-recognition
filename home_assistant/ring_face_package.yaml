@@ -5,15 +5,21 @@ homeassistant:
 
 automation:
   - id: ring_face_capture_press
-    alias: Ring Face - silent capture on press
+    alias: Ring Face - silent capture on motion
     mode: single
     max_exceeded: silent
     triggers:
       - trigger: state
-        entity_id: binary_sensor.doorbell_camera_ding
+        entity_id: binary_sensor.doorbell_camera_motion
         from: "off"
         to: "on"
-    conditions: []
+    # Do not admit another capture until 60 seconds after the previous start.
+    # The existing automation ID is preserved so this replaces the press version.
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ this.attributes.get('last_triggered') is none or
+             as_timestamp(now()) - as_timestamp(this.attributes.get('last_triggered')) >= 60 }}
     actions:
       - variables:
           capture_id: "{{ now().strftime('%Y%m%dT%H%M%S%f') }}_{{ trigger.to_state.context.id }}"

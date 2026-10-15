@@ -1,4 +1,5 @@
-# Replace the package's triggers AND conditions blocks. Never enable both.
+# Optional PRESS-ONLY alternative to motion. Replace triggers; append this
+# condition to existing cooldown conditions. Never enable a second automation.
 triggers:
   - trigger: state
     entity_id: event.doorbell_camera_ding
