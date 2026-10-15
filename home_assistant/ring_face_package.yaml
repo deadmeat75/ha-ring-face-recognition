@@ -1,0 +1,57 @@
+# Merge as a package. The app creates this shared directory on first start.
+homeassistant:
+  allowlist_external_dirs:
+    - /share/ring_face/capture
+
+automation:
+  - id: ring_face_capture_press
+    alias: Ring Face - silent capture on press
+    mode: single
+    max_exceeded: silent
+    triggers:
+      - trigger: state
+        entity_id: binary_sensor.doorbell_camera_ding
+        from: "off"
+        to: "on"
+    conditions: []
+    actions:
+      - variables:
+          capture_id: "{{ now().strftime('%Y%m%dT%H%M%S%f') }}_{{ trigger.to_state.context.id }}"
+          source_id: "{{ trigger.to_state.context.id }}"
+          pressed_at: "{{ now().isoformat() }}"
+      - repeat:
+          count: 3
+          sequence:
+            - variables:
+                attempt: "{{ repeat.index }}"
+                captured_at: "{{ now().isoformat() }}"
+            - action: camera.snapshot
+              continue_on_error: true
+              target:
+                entity_id: camera.doorbell_camera_live_view
+              data:
+                filename: "/share/ring_face/capture/{{ capture_id }}_{{ attempt }}.jpg"
+            - action: mqtt.publish
+              data:
+                topic: ring_face_recognition/capture
+                qos: 1
+                retain: false
+                payload: >-
+                  {{ {'event_id': capture_id, 'source_event_id': source_id,
+                      'pressed_at': pressed_at, 'captured_at': captured_at,
+                      'attempt': attempt | int} | to_json }}
+            - wait_for_trigger:
+                - trigger: mqtt
+                  topic: ring_face_recognition/events
+                  value_template: "{{ value_json.event_id }}"
+                  payload: "{{ capture_id }}"
+              timeout: "00:00:25"
+              continue_on_timeout: true
+            - if:
+                - condition: template
+                  value_template: >-
+                    {{ wait.trigger is not none and
+                       wait.trigger.payload_json.status != 'capture_failed' }}
+              then:
+                - stop: Visitor event processed
+            - delay: "00:00:03"

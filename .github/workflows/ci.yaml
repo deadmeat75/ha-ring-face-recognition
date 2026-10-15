@@ -1,0 +1,17 @@
+name: Verify app
+on: [push, pull_request]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements-dev.txt
+      - run: python scripts/check.py
+      - run: python ring_face/fetch_models.py /tmp/models
+      - run: |
+          python scripts/fetch_sample.py /tmp/lena.jpg
+          RING_TEST_MODELS=/tmp/models RING_TEST_IMAGE=/tmp/lena.jpg pytest -q
+      - run: docker build --platform linux/amd64 -t ring-face:test ring_face

@@ -1,0 +1,32 @@
+title: Front door visitors
+views:
+  - title: Visitors
+    path: visitors
+    icon: mdi:face-recognition
+    cards:
+      - type: markdown
+        content: >-
+          ## Silent visitor history
+          Face matches and trusted labels are informational. Ring source-frame
+          freshness is unverified. Open **Ring visitors** in the Home Assistant
+          sidebar for authenticated history, private snapshots and enrollment.
+      - type: entities
+        title: Latest observation (expires after 5 minutes)
+        show_header_toggle: false
+        entities:
+          - entity: sensor.front_door_last_visitor
+            name: Latest visitor
+          - entity: sensor.front_door_last_seen
+            name: Observed time
+          - entity: sensor.front_door_recognition_status
+            name: Recognition status
+          - entity: sensor.front_door_recognition_confidence
+            name: Cosine similarity (not probability)
+          - entity: sensor.front_door_recognition_health
+            name: Service health
+      - type: history-graph
+        title: Recognition activity
+        hours_to_show: 24
+        entities:
+          - sensor.front_door_recognition_status
+          - sensor.front_door_recognition_health

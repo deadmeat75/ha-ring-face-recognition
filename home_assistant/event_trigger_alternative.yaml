@@ -1,0 +1,11 @@
+# Replace the package's triggers AND conditions blocks. Never enable both.
+triggers:
+  - trigger: state
+    entity_id: event.doorbell_camera_ding
+conditions:
+  - condition: template
+    value_template: >-
+      {{ trigger.from_state is not none and trigger.to_state is not none and
+         trigger.from_state.state not in ['unknown', 'unavailable'] and
+         trigger.to_state.state not in ['unknown', 'unavailable'] and
+         trigger.from_state.state != trigger.to_state.state }}

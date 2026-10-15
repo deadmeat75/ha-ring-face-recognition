@@ -1,2 +1,210 @@
-# ha-ring-face-recognition
-Ring facial recognition for Home Assistant OS
+# Ring Face Recognition for Home Assistant OS
+
+Requires Home Assistant Core **2026.4 or newer** and a current Supervisor.
+
+An experimental **silent**, press-triggered, local YuNet/SFace recognition app
+for Generic x86-64 Home Assistant OS. Private enrollment and visitor history use
+Home Assistant ingress and SQLite. Reuses your **existing Mosquitto broker and
+MQTT integration**. No announcements, notifications, continuous video analysis,
+cloud AI requests, or lock operations.
+
+**Not an access-control system.** A match is a similarity result, not proof of
+identity, liveness, or authorization. Ring can return a cached frame. Unique
+filenames, file timestamps, EXIF and a recent press cannot prove source freshness.
+Every observation is `unverified` or `repeated` (and may carry stale-metadata
+warnings); no observation becomes a verified access event.
+
+## Installation on your HAOS laptop
+
+1. **Take an encrypted Home Assistant backup first.** With the previously
+   reported ~1 GiB available RAM and swap already in use, leave start-on-boot
+   disabled. See [resource guidance](docs/OPERATIONS.md#resources) before testing.
+2. The project repository is
+   `https://github.com/deadmeat75/ha-ring-face-recognition`, on branch `main`.
+   Home Assistant's repository installer must be able to clone it without a
+   GitHub login. If the repository is private, make it public when you are ready
+   to share the source, or use the local-app installation route in step 3.
+3. In Home Assistant: **Settings → Apps → App store → ⋮ → Repositories**
+   (older versions call these Add-ons). Add
+   `https://github.com/deadmeat75/ha-ring-face-recognition`, reload/check for updates,
+   and install **Ring Face Recognition**. Supervisor builds the amd64 image locally.
+   There is no image registry dependency and no host modification or Compose setup.
+   Building can briefly consume more resources than running; stop if swap pressure
+   or HA responsiveness worsens. Alternatively copy only `ring_face/` into the
+   local apps directory `/addons/ring_face/` using your existing supported file
+   access, then reload the app store. No manually managed Docker is needed on HAOS.
+4. In the app's **Configuration**, enter your existing broker connection:
+
+   ```yaml
+   mqtt_host: core-mosquitto
+   mqtt_port: 1883
+   mqtt_username: YOUR_EXISTING_OR_DEDICATED_MQTT_USER
+   mqtt_password: ENTER_SECURELY_IN_THE_APP_CONFIGURATION
+   mqtt_tls: false
+   timezone: America/Los_Angeles
+   similarity_threshold: 0.55
+   ambiguity_margin: 0.08
+   opencv_threads: 1
+   processing_timeout: 20
+   history_days: 30
+   image_days: 0
+   ```
+
+   Do not paste real passwords into this repository, automations, or chat. The
+   password uses HA's `password` configuration schema; Supervisor stores options
+   privately in `/data/options.json`. Masking is not encryption at rest; protect
+   HA administration and encrypt backups. Use your existing internal Mosquitto
+   credentials or a dedicated non-admin MQTT user accepted by that broker. The app
+   neither installs nor reconfigures Mosquitto. For a remote broker across an
+   untrusted network, use `mqtt_tls: true`, its TLS port (often 8883), and a publicly
+   trusted certificate. Certificate verification is mandatory.
+5. **Start the app manually**. It creates `/share/ring_face/capture` and its
+   private `/data` directories. Open **Web UI**, or enable **Show in sidebar** to
+   open **Ring visitors**. The ingress gateway authenticates access; port 8099 is
+   not exposed to your LAN. Enroll each consenting person with **3–8 photos**,
+   exactly one clear face per photo, varied angles and lighting. Photos are
+   discarded after normalized templates are extracted. Replace templates to
+   retrain; deleting a person deletes templates. Trusted is informational only.
+6. Copy [home_assistant/ring_face_package.yaml](home_assistant/ring_face_package.yaml)
+   to `/config/packages/ring_face.yaml`. Merge this into your existing
+   `homeassistant:` section of `/config/configuration.yaml` if packages are not
+   already enabled:
+
+   ```yaml
+   homeassistant:
+     packages: !include_dir_named packages
+   ```
+
+   Do **not** create duplicate `homeassistant:` keys. Keep your existing package
+   layout if different. The package allowlists `/share/ring_face/capture` for
+   `camera.snapshot`; both Core and this app see the supported `/share` mount.
+   It does not read Core's private `/config` filesystem or use public `/local`.
+   Run HA's **Check configuration**, then restart Core to apply directory settings
+   (an automation-only reload does not apply them). Do not enable the automation
+   until the app is started and broker discovery is working.
+7. The package uses only `binary_sensor.doorbell_camera_ding` (`off` → `on`) and
+   `camera.doorbell_camera_live_view`. If the binary sensor fails to represent
+   presses, **replace** its trigger/conditions with
+   [event_trigger_alternative.yaml](home_assistant/event_trigger_alternative.yaml)
+   for `event.doorbell_camera_ding`. Never run both versions. `mode: single`,
+   persistent source IDs, event IDs and a 10-second app debounce suppress duplicates.
+   Closely spaced genuine presses may intentionally coalesce.
+8. Ring the doorbell once. Verify the automation trace, app history and MQTT
+   entities listed below. A failed/missing/invalid snapshot is retried up to three
+   times with bounded file waits and spacing. Normal successful captures stop
+   after the first result. Ring delays can still exhaust attempts. Verify a second
+   physical press creates a different event, then test with Ring unavailable.
+9. Create a new dashboard using [home_assistant/dashboard.yaml](home_assistant/dashboard.yaml)
+   in its raw configuration editor, or merge its view into your dashboard. Native
+   cards show current observations and health. Use the authenticated **Ring
+   visitors** sidebar for durable, filterable history, private images, corrections,
+   enrollment, deletion and retention. No custom frontend components are needed.
+
+Before routine use, follow [the HAOS acceptance checklist](docs/VALIDATION.md).
+The tests here cannot verify your Ring latency, broker credentials, ingress
+sessions, Supervisor installation, or laptop memory pressure remotely.
+
+## Entities and MQTT protocol
+
+Discovery automatically creates these suggested IDs (HA may suffix or preserve
+an existing entity ID; check MQTT device settings if they differ):
+
+| Suggested entity | Meaning |
+| --- | --- |
+| `sensor.front_door_last_visitor` | Identity of latest observed event, or Unknown |
+| `sensor.front_door_recognition_status` | recognized, unknown, ambiguous, no_face, capture_failed, error |
+| `sensor.front_door_recognition_confidence` | Raw cosine similarity, **not a probability**; absent for no match score |
+| `sensor.front_door_last_seen` | Event time in UTC |
+| `sensor.front_door_recognition_health` | Worker readiness / capture or inference/storage error |
+
+Runtime prefix is **`ring_face_recognition`**:
+
+| Topic | Retained | Purpose |
+| --- | --- | --- |
+| `ring_face_recognition/capture` | Never | Snapshot command from the HA automation |
+| `ring_face_recognition/state` | Never | Live observation state for discovery sensors |
+| `ring_face_recognition/events` | Never | Event result / capture acknowledgement |
+| `ring_face_recognition/health` | Never | 30-second heartbeat; includes engine-only peak RSS |
+| `ring_face_recognition/availability` | Yes | `online` / MQTT last will `offline` |
+| `homeassistant/sensor/ring_face_front_door/+/config` | Yes | Standard HA discovery prefix |
+
+The standard discovery prefix remains `homeassistant`; your MQTT integration
+already listens there. Stable unique IDs begin `ring_face_front_door_`. App and
+HA reconnects resend discovery. Old retained state/events are cleared on connect;
+retained replay commands are rejected, timestamps are bounded, completed IDs are
+persistently deduplicated, and state sensors expire after 300 seconds. Health
+expires after 90 seconds. A restored HA Recorder state is historical, not a fresh
+visitor event. Automation acknowledgement races are harmless: retries reuse the
+same ID, completed events cannot be processed again, and leftover capture files
+are purged. No unlock topic or authorization endpoint exists. Templates never
+leave the app in MQTT messages or HA attributes. MQTT messages do contain visitor
+names, so restrict broker access and treat HA Recorder/backups as personal data.
+
+## Matching, processing and storage
+
+- CPU only: OpenCV **4.12.0.88**, YuNet `2023mar` and SFace `2021dec`; no Torch,
+  GPU, Coral, or heavyweight inference service. Haswell-compatible amd64 wheel;
+  actual i5-4310U timing remains a target-machine check.
+- A single lazy subprocess holds both models. OpenCV and BLAS use one thread by
+  default, inference has lowered scheduling priority, the detection preview is at
+  most 640 pixels, and input is bounded to 6 MiB / 12 megapixels then normalized
+  to at most 1280 pixels. One active job and two queued commands; enrollment and
+  capture share the same engine lock. A native inference overrun terminates the
+  subprocess; the next request recreates it. Enrollment is best performed while
+  capture automation is disabled to avoid busy-engine errors.
+- Detection score cutoff is 0.80, minimum identity face size 60 pixels on the
+  normalized image. Zero faces → `no_face`; multiple detected faces → `ambiguous`
+  with no chosen identity. Small sole face → `unknown`. Detection can miss faces;
+  these outcomes describe detected faces, not a guarantee about the scene.
+- Default match cosine threshold **0.55** and distinct-person margin **0.08** are
+  configurable in app options. They are stricter than OpenCV's demonstration
+  cosine cutoff 0.363, but are **not calibrated for your doorway**. Each person's
+  score is their best template match. If the best two people are within the
+  margin, identity stays ambiguous. Collect unknown and known examples under
+  actual lighting; prefer false rejections to falsely assigning a person. Restart
+  the app after changing thresholds. A higher score is not a probability.
+- Enrollment rejects zero/multiple/small faces, checks cross-photo consistency
+  (cosine ≥0.45), warns about blur and near duplicates, and stores only normalized
+  128-float templates in private SQLite. Quality heuristics are not liveness or
+  spoof protection. Names and filenames never become filesystem paths.
+- SQLite uses numbered transactional migrations, foreign keys, parameterized
+  values, a serialized writer lock, and persistent event IDs. Event records contain
+  UTC/local time, identity, score, status, face count, optional private snapshot,
+  informational trusted flag, duration, source/event IDs, attempt, frame hash,
+  image metadata and freshness. Corrections preserve the original label and never
+  train templates. The history UI returns the latest 200 rows matching person and
+  UTC date filters; retention bounds the complete database.
+- App data: `/data/visitors.sqlite3` and `/data/images/`. Defaults retain **30 days
+  of events, no images**. UI retention settings override app defaults and apply
+  immediately; startup and minute maintenance also purge expired data. Completed
+  exchange images are deleted, duplicates/crash leftovers after ~3 minutes plus
+  the maintenance interval. Enrollment photos never enter a public directory.
+
+## Development and verification
+
+Python 3.12 on Linux amd64:
+
+```sh
+python3 -m venv .venv
+.venv/bin/pip install --require-hashes -r ring_face/requirements.lock
+.venv/bin/pip install -r requirements-dev.txt
+python3 ring_face/fetch_models.py /tmp/ring-models
+python3 scripts/fetch_sample.py /tmp/ring-lena.jpg
+.venv/bin/python scripts/check.py
+RING_TEST_MODELS=/tmp/ring-models RING_TEST_IMAGE=/tmp/ring-lena.jpg .venv/bin/pytest -q
+.venv/bin/python scripts/benchmark.py --models /tmp/ring-models --image /tmp/ring-lena.jpg
+docker build --platform linux/amd64 -t ring-face:0.1.0 ring_face
+```
+
+Model fetches require `media.githubusercontent.com`, packages use PyPI, the
+base image uses Docker Hub, and the optional public test image uses
+`raw.githubusercontent.com`. Runtime recognition has **no model/cloud download**
+and never uploads images. See [models and sources](docs/MODELS.md). Corporate/cloud
+proxy environments can use `python scripts/build_cloud.py`; it supplies existing
+proxy DNS and a BuildKit-mounted trust bundle while keeping TLS and package hash
+verification enabled. It does not install anything on HAOS.
+
+[Validation results and limitations](docs/VALIDATION.md) ·
+[Operations, backup, upgrade, rollback, uninstall](docs/OPERATIONS.md) ·
+[Security and future access architecture](docs/SECURITY.md) ·
+[Complete tree](docs/TREE.txt)

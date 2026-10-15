@@ -1,0 +1,171 @@
+import hashlib
+import json
+import logging
+from pathlib import Path
+import queue
+import threading
+import time
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+from .images import ID, capture_read
+from .engine import rank
+
+LOG = logging.getLogger(__name__)
+BASE = "ring_face_recognition"
+
+
+def timestamp(value):
+    dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if dt.tzinfo is None:
+        raise ValueError("Timestamp must include timezone")
+    return dt.timestamp()
+
+
+class Service:
+    def __init__(self, settings, store, engine):
+        self.settings, self.store, self.engine = settings, store, engine
+        self.queue = queue.Queue(maxsize=2)
+        self.stop = threading.Event()
+        self.publish = lambda *a, **kw: None
+        self.active = False
+        self.health = "starting"
+        self.thread = None
+        self.enqueue_lock = threading.Lock()
+
+    def submit(self, payload, retained=False):
+        # MQTT commands must never be retained. Date and dedup checks survive restarts.
+        if retained or len(payload) > 2048:
+            return False
+        try:
+            item = json.loads(payload)
+            if not isinstance(item,dict):
+                return False
+            for key in ("event_id", "source_event_id"):
+                if not isinstance(item.get(key),str) or not ID.fullmatch(item[key]):
+                    return False
+            if type(item.get("attempt")) is not int or not 1 <= item["attempt"] <= 3:
+                return False
+            epoch = timestamp(item["pressed_at"])
+            captured = timestamp(item["captured_at"])
+            now = time.time()
+            if not now - 90 <= epoch <= now + 5 or not epoch - 5 <= captured <= now + 5:
+                return False
+            item["epoch"], item["capture_epoch"] = epoch, captured
+            with self.enqueue_lock:
+                previous = self.store.event(item["event_id"])
+                if previous and (previous["status"] != "capture_failed" or item["attempt"] <= previous["attempt"]):
+                    return False
+                if not previous and self.store.duplicate(item["source_event_id"], epoch):
+                    return False
+                self.queue.put_nowait(item)
+            return True
+        except (ValueError, KeyError, TypeError, queue.Full):
+            LOG.warning(json.dumps({"event":"command_rejected"}))
+            return False
+
+    def process(self, item):
+        previous = self.store.event(item["event_id"])
+        if previous and (previous["status"] != "capture_failed" or item["attempt"] <= previous["attempt"]):
+            return
+        if not previous and self.store.duplicate(item["source_event_id"], item["epoch"]):
+            return
+        started = time.monotonic()
+        event = dict(id=item["event_id"], timestamp=datetime.fromtimestamp(item["epoch"], timezone.utc).isoformat(),
+                     local_time=datetime.fromtimestamp(item["epoch"], ZoneInfo(self.settings.timezone)).isoformat(),
+                     epoch=item["epoch"], person_id=None, identity="Unknown", score=None, status="capture_failed",
+                     face_count=0, snapshot=None, trusted=0, duration_ms=0, freshness="unverified", error=None,
+                     attempt=item["attempt"], image_hash=None, corrected_identity=None, source_event_id=item["source_event_id"])
+        try:
+            raw = None
+            deadline = time.monotonic() + 2
+            while True:
+                try:
+                    raw, metadata = capture_read(self.settings.captures, item["event_id"], item["attempt"], item["capture_epoch"])
+                    break
+                except (OSError, ValueError):
+                    if time.monotonic() >= deadline:
+                        raise ValueError("Missing, stale, or invalid snapshot after bounded wait")
+                    time.sleep(0.25)
+            digest = hashlib.sha256(raw).hexdigest()
+            event["image_hash"] = digest
+            event["image_metadata"] = json.dumps(metadata)
+            if self.store.repeated_image(digest):
+                event["freshness"] = "repeated"
+            event["status"] = "error"
+            result = self.engine.analyze(raw)
+            features = result["features"]
+            if any(v is None for v in features):
+                event.update(status="ambiguous" if len(features)>1 else "unknown", face_count=len(features))
+            else:
+                event.update(rank(features, self.store.people(vectors=True), self.settings.similarity_threshold, self.settings.ambiguity_margin))
+            person = next((p for p in self.store.people() if p["id"] == event["person_id"]), None)
+            if person:
+                event.update(identity=person["name"], trusted=int(person["trusted"]))
+            if metadata.get("source_time_comparison") == "outside_capture_window":
+                result.setdefault("warnings",[]).append("Source EXIF time is outside capture window; freshness remains unverified")
+            if result.get("warnings"):
+                event["error"] = "; ".join(result["warnings"])
+            if self.store.setting("image_days", self.settings.image_days) > 0:
+                path = self.settings.data / "images" / (event["id"] + ".jpg")
+                path.write_bytes(raw)
+                event["snapshot"] = path.name
+        except Exception as e:
+            # Deliberately do not log payloads, credentials or image bytes.
+            event["error"] = str(e)[:180]
+            LOG.warning(json.dumps({"event":"processing_failed", "id":event["id"], "status":event["status"]}))
+        finally:
+            event["duration_ms"] = round((time.monotonic() - started) * 1000)
+            self.store.save_event(event)
+            self.health = "inference_error" if event["status"] == "error" else ("capture_failed" if event["status"] == "capture_failed" else "ready")
+            path = self.settings.captures / f"{item['event_id']}_{item['attempt']}.jpg"
+            path.unlink(missing_ok=True)
+            # State is live-only. Availability and expiration prevent old recognition
+            # state being represented as a newly observed visitor after reconnect.
+            self.publish(BASE + "/state", self.state(event), retain=False)
+            self.publish(BASE + "/events", self.state(event), retain=False)
+
+    def state(self, event):
+        return {"event_id":event["id"], "identity":event["identity"], "status":event["status"],
+                "score":event["score"], "last_seen":event["timestamp"], "freshness":event["freshness"],
+                "trusted":bool(event["trusted"]), "face_count":event["face_count"]}
+
+    def maintenance(self):
+        self.store.retention(self.store.setting("history_days",self.settings.history_days), self.store.setting("image_days",self.settings.image_days))
+        for path in self.settings.captures.glob("*.jpg"):
+            if path.is_file() and time.time() - path.lstat().st_mtime > 180:
+                path.unlink(missing_ok=True)
+
+    def run(self):
+        last_maintenance = 0
+        self.health = "ready"
+        while not self.stop.is_set():
+            try:
+                if time.monotonic() - last_maintenance > 60:
+                    self.maintenance()
+                    last_maintenance = time.monotonic()
+                try:
+                    item = self.queue.get(timeout=1)
+                except queue.Empty:
+                    continue
+                try:
+                    self.active = True
+                    self.process(item)
+                finally:
+                    self.active = False
+                    self.queue.task_done()
+            except Exception:
+                self.health = "storage_error"
+                LOG.exception(json.dumps({"event":"worker_failed"}))
+                self.stop.wait(2)
+
+
+    def start(self):
+        self.settings.captures.mkdir(parents=True, exist_ok=True)
+        self.maintenance()
+        self.thread = threading.Thread(target=self.run, daemon=True)
+        self.thread.start()
+
+    def close(self):
+        self.stop.set()
+        if self.thread:
+            self.thread.join(timeout=self.settings.processing_timeout + 5)

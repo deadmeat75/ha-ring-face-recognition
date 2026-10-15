@@ -1,0 +1,4 @@
+-r ring_face/requirements.txt
+pytest==8.4.2
+PyYAML==6.0.3
+psutil==7.1.0
