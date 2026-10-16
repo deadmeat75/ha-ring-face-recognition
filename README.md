@@ -16,7 +16,7 @@ warnings); no observation becomes a verified access event.
 
 ## Update an existing installation
 
-**Latest: 0.2.0 — completed Ring recordings.** Investigation of released HA
+**Latest: 0.2.1 — completed Ring recordings.** Investigation of released HA
 Ring code confirmed that `camera.snapshot` uses a cached still extracted from
 recorded video, while live view uses a separate WebRTC path. An empty early
 frame can therefore persist even while Ring's phone app shows a live visitor.
@@ -31,8 +31,8 @@ retains the selected JPEG. It processes new completed recordings, so it is
 remain compatible, but the older snapshot automation is not the recommended
 Ring source. Disable it when enabling the recording automation.
 
-Image days >0 is required for viewable retained pictures. One newest no-face
-picture is kept for up to one day; ordinary visitor history stays uncluttered.
+Image days >0 is required for viewable retained pictures. All no-face snapshots follow Image days retention while troubleshooting;
+ordinary visitor history stays uncluttered.
 History, enrollment and MQTT credentials survive a normal update. No new broker,
 AI service, Ring login in this app, or unlocking capability is introduced.
 
@@ -239,7 +239,7 @@ python3 scripts/fetch_sample.py /tmp/ring-lena.jpg
 .venv/bin/python scripts/check.py
 RING_TEST_MODELS=/tmp/ring-models RING_TEST_IMAGE=/tmp/ring-lena.jpg .venv/bin/pytest -q
 .venv/bin/python scripts/benchmark.py --models /tmp/ring-models --image /tmp/ring-lena.jpg
-docker build --platform linux/amd64 -t ring-face:0.2.0 ring_face
+docker build --platform linux/amd64 -t ring-face:0.2.1 ring_face
 ```
 
 Model fetches require `media.githubusercontent.com`, packages use PyPI, the

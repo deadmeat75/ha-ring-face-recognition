@@ -116,10 +116,8 @@ class Store:
     def retention(self, history_days, image_days):
         now = time.time()
         with self.lock, self.db:
-            latest_no_face = self.db.execute("SELECT id FROM events WHERE status='no_face' AND snapshot IS NOT NULL ORDER BY epoch DESC LIMIT 1").fetchone()
-            latest_no_face = latest_no_face[0] if latest_no_face else None
             for e in self.db.execute("SELECT id,snapshot,epoch,status FROM events").fetchall():
-                if e["snapshot"] and ((e["status"] == "no_face" and (e["id"] != latest_no_face or e["epoch"] < now - 86400)) or image_days == 0 or e["epoch"] < now - image_days * 86400):
+                if e["snapshot"] and (image_days == 0 or e["epoch"] < now - image_days * 86400):
                     (self.data / "images" / e["snapshot"]).unlink(missing_ok=True)
                     self.db.execute("UPDATE events SET snapshot=NULL WHERE id=?", (e["id"],))
                 if e["epoch"] < now - history_days * 86400:

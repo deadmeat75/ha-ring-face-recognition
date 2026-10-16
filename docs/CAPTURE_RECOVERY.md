@@ -1,3 +1,6 @@
+> Current 0.2.1 policy: all no-face snapshots follow configured Image days;
+> the one-image/one-day policy described below is historical.
+
 # Capture recovery — 0.1.3
 
 The workspace cannot inspect the owner's live HA automation, MQTT connection or

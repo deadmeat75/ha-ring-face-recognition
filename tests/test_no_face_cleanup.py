@@ -17,7 +17,7 @@ def age_events(store,seconds=30):
         store.db.execute('UPDATE events SET epoch=epoch-?',(seconds,))
 
 
-def test_keep_only_latest_no_face_diagnostic_and_keep_unknown_faces(setup):
+def test_keep_all_no_face_diagnostics_and_unknown_faces(setup):
     settings,store,_,_=setup
     store.set_retention(30,7)
     first=capture(setup,'capture_00000001','source_00000001',[])
@@ -26,8 +26,8 @@ def test_keep_only_latest_no_face_diagnostic_and_keep_unknown_faces(setup):
     age_events(store)
     second=capture(setup,'capture_00000002','source_00000002',[])
     assert second['snapshot'] and (settings.data/'images'/second['snapshot']).exists()
-    assert store.event(first['id'])['snapshot'] is None
-    assert not (settings.data/'images'/first['snapshot']).exists()
+    assert store.event(first['id'])['snapshot'] == first['snapshot']
+    assert (settings.data/'images'/first['snapshot']).exists()
     age_events(store)
     visitor=capture(setup,'capture_00000003','source_00000003',[[1.,0.]])
     assert visitor['status']=='unknown' and visitor['snapshot']
@@ -47,6 +47,10 @@ def test_no_face_diagnostic_expires_and_history_stays_opt_in(setup):
     assert status['last_command_result']=='accepted'
     assert client.get('/api/history/'+event['id']+'/image').status_code==200
     age_events(store,86401)
+    store.retention(30,7)
+    assert store.event(event['id'])['snapshot'] == event['snapshot']
+    assert client.get('/api/history/'+event['id']+'/image').status_code==200
+    age_events(store,7*86400)
     store.retention(30,7)
     assert store.event(event['id'])['snapshot'] is None
     assert not (settings.data/'images'/event['snapshot']).exists()

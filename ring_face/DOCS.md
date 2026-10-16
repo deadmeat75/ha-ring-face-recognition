@@ -50,3 +50,11 @@ camera.snapshot can return a cached first/early recording frame; Ring WebRTC liv
 view is a different path. The new workflow downloads each completed event video
 through your existing HA Ring account and Downloader into /share, then analyzes
 up to five local frames. No new heavyweight stack or broker is installed.
+
+## Diagnostic retention (0.2.1)
+
+Superseding the older cleanup policies above: all no-face snapshots now follow
+normal Image days retention. Set Image days to 30 while troubleshooting and
+check Show no-face events, then Filter / refresh. New events no longer remove
+earlier diagnostic images. History expiration and explicit deletion still apply.
+Previously deleted images cannot be restored by this update.

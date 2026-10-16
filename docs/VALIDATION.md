@@ -1,7 +1,8 @@
 # Validation record
 
 Executed in this Linux amd64 cloud workspace, 2026-10-16 (UTC).
-Updated for app version 0.2.0. This is development
+Retention regression tests rerun for app version 0.2.1; recording/container measurements
+below were performed on 0.2.0. This is development
 validation, not a claim of installation on the owner's HAOS laptop.
 
 | Check | Outcome |
@@ -17,7 +18,7 @@ validation, not a claim of installation on the owner's HAOS laptop.
 | Security and recovery checks | PASS; ingress peer enforcement, forwarded-header rejection, CSRF, upload limits/type/quality validation, path/symlink/FIFO protection, bounded queue, engine timeout termination, invalid/repeated images, source metadata diagnostics |
 | Full image build | PASS; final `linux/amd64` Python Debian image, model files and license notices included |
 | Runtime container functional test | PASS; actual model → event → SQLite → authenticated history, direct access rejected, 1 CPU and 384 MiB limit, exit 0, no OOM kill |
-| No-face diagnostics | PASS; only newest no-face image retained up to one day with image retention enabled, older images purged, hidden text history opt-in, latest-capture API independent of filters, zero retention respected |
+| No-face diagnostics | PASS; all no-face images retained for configured image days, survive new events and one-day boundary, expire normally, hidden text history opt-in, latest-capture API independent of filters, zero retention respected |
 | Fast result / motion recovery | PASS; already-received completion attributes satisfy wait immediately, attempt/event gates reject stale results, no-face retries update one event, reused contexts get new source IDs, motion/press share cooldown |
 | Recording container handoff | PASS; separate writer UID 65534 and app UID 0, delayed shared MP4, real face detection and private history in 4009 ms including 3-second write delay; engine peak 175 MiB, cgroup peak 166 MiB, no OOM |
 | Recording extraction | PASS; synthetic MP4 with empty first frame and later public face produces recognized result using real models; invalid/empty/stale/symlink/oversize recordings rejected and private work files cleaned |
@@ -57,7 +58,7 @@ RING_TEST_MODELS=/workspace/ring-models RING_TEST_IMAGE=/workspace/ring-lena.jpg
 python scripts/build_cloud.py
 ```
 
-For the image smoke test, create a temporary container from `ring-face:0.2.0`
+For the image smoke test, create a temporary container from `ring-face:0.2.1`
 with `--memory=384m --memory-swap=384m --cpus=1 -e PYTHONPATH=/app` and command
 `python /tmp/container_smoke.py`. Copy `scripts/container_smoke.py` to that path
 and the downloaded public sample to `/tmp/sample.jpg` using `docker cp`, start
@@ -113,7 +114,7 @@ real Core service call still needs the live acceptance steps below.
    If using it, supply the named `RING_TEST_MQTT_*` process variables securely,
    without exposing passwords in shell history, source or chat. Test ACLs may
    need a temporary-topic allowance. This test was skipped here.
-4. Follow docs/RING_RECORDINGS.md for the 0.2.0 update, configure Downloader
+4. Follow docs/RING_RECORDINGS.md for the 0.2.1 update, configure Downloader
    with base directory `/share`, and install the completed-recording automation.
    Confirm a fresh saved recording downloads and yields a selected frame.
    For legacy JPEG tests use docs/SNAPSHOT_HANDOFF.md. Confirm the shared directory

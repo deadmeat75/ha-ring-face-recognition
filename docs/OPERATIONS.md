@@ -66,11 +66,10 @@ wait timeout cannot repair a failed `camera.snapshot` service call by itself.
 
 ## Retention, deletion and backups
 
-History defaults to 30 days, images to zero days. From 0.1.3, only the latest no-face diagnostic
-image is kept for up to one day when image retention is enabled; older ones are
-removed. No-face records are hidden from normal history but the Latest capture
-panel always reports the newest outcome. Image days 0 disables diagnostic images
-as well. Unknown visitors with a detected face use normal retention. UI retention settings are
+History defaults to 30 days, images to zero days. From 0.2.1, all no-face snapshots
+follow normal Image days retention; new events do not delete earlier diagnostics.
+No-face records remain hidden from normal history unless Show no-face events is
+checked. Image days 0 disables all images. UI retention settings are
 persistent and override option defaults; use the UI to change them after initial
 setup. A change immediately purges expired images/events, and startup/minute
 maintenance repeats this. Image files have no public URL. Correcting history does

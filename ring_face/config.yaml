@@ -1,5 +1,5 @@
 name: Ring Face Recognition
-version: "0.2.0"
+version: "0.2.1"
 slug: ring_face
 description: Silent, local doorbell face recognition and private visitor history
 url: https://github.com/deadmeat75/ha-ring-face-recognition

@@ -14,7 +14,7 @@ jobs:
       - run: |
           python scripts/fetch_sample.py /tmp/lena.jpg
           RING_TEST_MODELS=/tmp/models RING_TEST_IMAGE=/tmp/lena.jpg pytest -q
-      - run: docker build --platform linux/amd64 -t ring-face:0.2.0 ring_face
+      - run: docker build --platform linux/amd64 -t ring-face:0.2.1 ring_face
       - run: python scripts/verify_handoff_containers.py --sample /tmp/lena.jpg
       - run: python scripts/make_test_recording.py --face /tmp/lena.jpg --output /tmp/ring-test-event.mp4
       - run: python scripts/verify_handoff_containers.py --recording --sample /tmp/ring-test-event.mp4

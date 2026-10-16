@@ -1,3 +1,10 @@
+# 0.2.1
+
+- Preserve every no-face diagnostic snapshot for normal configured Image days;
+  new captures no longer purge earlier no-face images or expire them after one day.
+- Keep zero-image retention, history expiry and explicit deletion controls.
+- No automation, broker, enrollment or database migration changes required.
+
 # 0.2.0
 
 - Add a completed-recording route for Ring: native camera.snapshot may return a
