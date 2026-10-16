@@ -44,13 +44,25 @@ MQTT data is informational, never an authorization channel.
 
 ## Freshness and replay
 
+The dedicated exchange directory uses sticky mode 1777 to permit Core and this
+app to write even under different container user IDs. Its parent is 0755; `/data`
+remains private (umask 077). This does not expose an HTTP endpoint. Other apps
+with the `/share` mount can access shared captures, so only transient exchange
+images belong there. Do not extend these permissions to `/data`, enrollment
+storage, retained images, or all of `/share`.
+
 Capture command schema:
 
 ```json
-{"event_id":"unique_capture_0001","source_event_id":"unique_press_0001","pressed_at":"2026-10-15T18:00:00+00:00","captured_at":"2026-10-15T18:00:01+00:00","attempt":1}
+{"event_id":"unique_capture_0001","source_event_id":"unique_press_0001","pressed_at":"2026-10-15T18:00:00+00:00","captured_at":"2026-10-15T18:00:01+00:00","attempt":1,"snapshot_path":"/share/ring_face/capture/unique_capture_0001_1.jpg"}
 ```
 
-The app accepts only timezoned commands within 90 seconds of a press (maximum
+The optional `snapshot_path` must exactly match the fixed directory and derived
+event/attempt basename; it is checked, never used as an arbitrary input path.
+Older commands without that field remain compatible. The five-minute event age
+allows bounded multi-attempt capture deadlines; each attempt still requires a
+recent file and fresh capture timestamp, and successful IDs remain deduplicated.
+The app accepts only timezoned commands within 300 seconds of the original motion/press event (maximum
 five seconds future skew), capture timestamps after the press with five seconds
 skew allowance, attempts 1–3, and an appropriately recent image mtime. It validates
 decoding and records the original format, dimensions, available EXIF timestamps

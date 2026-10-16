@@ -1,5 +1,5 @@
 name: Ring Face Recognition
-version: "0.1.0"
+version: "0.1.1"
 slug: ring_face
 description: Silent, local doorbell face recognition and private visitor history
 url: https://github.com/deadmeat75/ha-ring-face-recognition
@@ -18,6 +18,7 @@ backup: cold
 map:
   - type: share
     read_only: false
+    path: /share
 options:
   mqtt_host: core-mosquitto
   mqtt_port: 1883
@@ -29,6 +30,7 @@ options:
   ambiguity_margin: 0.08
   opencv_threads: 1
   processing_timeout: 20
+  capture_timeout: 10
   history_days: 30
   image_days: 0
 schema:
@@ -42,5 +44,6 @@ schema:
   ambiguity_margin: float(0.01,0.5)
   opencv_threads: int(1,2)
   processing_timeout: int(5,60)
+  capture_timeout: int(1,60)
   history_days: int(1,365)
   image_days: int(0,30)

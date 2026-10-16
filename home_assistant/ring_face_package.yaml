@@ -10,20 +10,27 @@ automation:
     max_exceeded: silent
     triggers:
       - trigger: state
-        entity_id: binary_sensor.doorbell_camera_motion
-        from: "off"
-        to: "on"
+        entity_id: sensor.doorbell_camera_last_motion
+        not_from: ["unknown", "unavailable"]
+        not_to: ["unknown", "unavailable"]
     # Do not admit another capture until 60 seconds after the previous start.
     # The existing automation ID is preserved so this replaces the press version.
     conditions:
+      - condition: template
+        value_template: >-
+          {{ trigger.from_state is not none and trigger.to_state is not none and
+             trigger.from_state.state != trigger.to_state.state }}
       - condition: template
         value_template: >-
           {{ this.attributes.get('last_triggered') is none or
              as_timestamp(now()) - as_timestamp(this.attributes.get('last_triggered')) >= 60 }}
     actions:
       - variables:
-          capture_id: "{{ now().strftime('%Y%m%dT%H%M%S%f') }}_{{ trigger.to_state.context.id }}"
-          source_id: "{{ trigger.to_state.context.id }}"
+          source_id: >-
+            {{ trigger.to_state.context.id if trigger is defined and
+               trigger.to_state is defined and trigger.to_state is not none
+               else now().strftime('manual_%Y%m%dT%H%M%S%f') }}
+          capture_id: "{{ now().strftime('%Y%m%dT%H%M%S%f') }}_{{ source_id }}"
           pressed_at: "{{ now().isoformat() }}"
       - repeat:
           count: 3
@@ -31,12 +38,13 @@ automation:
             - variables:
                 attempt: "{{ repeat.index }}"
                 captured_at: "{{ now().isoformat() }}"
+                snapshot_path: "/share/ring_face/capture/{{ capture_id }}_{{ repeat.index }}.jpg"
             - action: camera.snapshot
               continue_on_error: true
               target:
                 entity_id: camera.doorbell_camera_live_view
               data:
-                filename: "/share/ring_face/capture/{{ capture_id }}_{{ attempt }}.jpg"
+                filename: "{{ snapshot_path }}"
             - action: mqtt.publish
               data:
                 topic: ring_face_recognition/capture
@@ -45,13 +53,14 @@ automation:
                 payload: >-
                   {{ {'event_id': capture_id, 'source_event_id': source_id,
                       'pressed_at': pressed_at, 'captured_at': captured_at,
-                      'attempt': attempt | int} | to_json }}
+                      'attempt': attempt | int, 'snapshot_path': snapshot_path} | to_json }}
             - wait_for_trigger:
                 - trigger: mqtt
                   topic: ring_face_recognition/events
                   value_template: "{{ value_json.event_id }}"
                   payload: "{{ capture_id }}"
-              timeout: "00:00:25"
+              # Covers capture_timeout <=60s + processing_timeout <=60s.
+              timeout: "00:02:10"
               continue_on_timeout: true
             - if:
                 - condition: template

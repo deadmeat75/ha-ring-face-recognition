@@ -17,3 +17,11 @@ there is deliberately no published HTTP port.
 Threshold default 0.55 is a cosine similarity threshold, never a percentage or
 probability. Ambiguity margin default 0.08 compares the best two distinct people.
 The trusted flag is only an informational registry label. Nothing unlocks doors.
+
+## Snapshot handoff (0.1.1)
+
+Set `capture_timeout: 10` (range 1–60 seconds) in Configuration. This is separate
+from `processing_timeout`, which bounds model initialization/inference. Update
+your HA automation and snapshot directory allowlist as described in
+[Snapshot update and verification](../docs/SNAPSHOT_HANDOFF.md). Private visitor
+history and enrollment data survive an ordinary app update; do not uninstall.

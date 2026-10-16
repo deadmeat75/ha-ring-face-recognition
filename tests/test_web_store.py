@@ -16,6 +16,7 @@ def client(setup):
 def auth(client):
     client.environ_base['REMOTE_ADDR']='172.30.32.2'
     r=client.get('/api/session');assert r.status_code==200
+    assert r.json['capture_timeout']==10
     return {'X-CSRF-Token':r.json['csrf']}
 
 

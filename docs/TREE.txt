@@ -6,6 +6,7 @@ ha-ring-face-recognition/
   docs/MODELS.md
   docs/OPERATIONS.md
   docs/SECURITY.md
+  docs/SNAPSHOT_HANDOFF.md
   docs/TREE.txt
   docs/VALIDATION.md
   home_assistant/dashboard.yaml
@@ -43,8 +44,11 @@ ha-ring-face-recognition/
   scripts/check.py
   scripts/container_smoke.py
   scripts/fetch_sample.py
+  scripts/handoff_container_fixture.py
   scripts/prepare_cloud.sh
+  scripts/verify_handoff_containers.py
   tests/conftest.py
+  tests/test_capture_handoff.py
   tests/test_live_mqtt.py
   tests/test_models.py
   tests/test_mqtt.py

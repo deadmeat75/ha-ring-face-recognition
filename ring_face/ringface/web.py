@@ -46,6 +46,7 @@ def create_app(settings, store, engine, service):
     @app.get("/api/session")
     def session():
         return jsonify(csrf=csrf, health=service.health, engine_peak_rss_kib=engine.peak_rss_kib,
+                       capture_timeout=settings.capture_timeout, capture_directory=str(settings.captures),
                        history_days=store.setting("history_days",settings.history_days),image_days=store.setting("image_days",settings.image_days))
 
     @app.get("/api/people")

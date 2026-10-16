@@ -14,6 +14,14 @@ filenames, file timestamps, EXIF and a recent motion event cannot prove source f
 Every observation is `unverified` or `repeated` (and may carry stale-metadata
 warnings); no observation becomes a verified access event.
 
+## Update an existing installation
+
+**0.1.1 fixes snapshot handoff:** explicit shared mount and directory permissions,
+a configurable `capture_timeout: 10`, matching camera/MQTT filenames, complete
+image checks, and specific diagnostics. Follow the complete
+[0.1.1 update and verification guide](docs/SNAPSHOT_HANDOFF.md). Update both the
+app **and** your HA automation; keep your existing MQTT credentials and app data.
+
 ## Installation on your HAOS laptop
 
 1. **Take an encrypted Home Assistant backup first.** With the previously
@@ -46,6 +54,7 @@ warnings); no observation becomes a verified access event.
    ambiguity_margin: 0.08
    opencv_threads: 1
    processing_timeout: 20
+   capture_timeout: 10
    history_days: 30
    image_days: 0
    ```
@@ -82,23 +91,30 @@ warnings); no observation becomes a verified access event.
    Run HA's **Check configuration**, then restart Core to apply directory settings
    (an automation-only reload does not apply them). Do not enable the automation
    until the app is started and broker discovery is working.
-7. The package now triggers on **`binary_sensor.doorbell_camera_motion`**
-   (`off` → `on`) and captures `camera.doorbell_camera_live_view`. Walking up can
+7. The package now triggers on timestamp changes of
+   **`sensor.doorbell_camera_last_motion`** and captures
+   `camera.doorbell_camera_live_view`. This is the timestamp sensor confirmed on
+   your installation. If using the binary sensor instead, replace the trigger
+   with `binary_sensor.doorbell_camera_motion` (`off` → `on`). Walking up can
    therefore trigger recognition when Ring reports motion; no bell press is
    required. Enable motion detection in Ring and check its detection zones.
    There is a **60-second cooldown from the previous capture start**, plus
    `mode: single`, persistent IDs and the app's 10-second duplicate suppression.
-   Motion while the sensor remains `on` does not retrigger; another `off` → `on`
-   transition after the cooldown is needed. Motion sensitivity and Ring cloud
-   latency still determine whether/when someone approaching is detected.
+   A new timestamp change after the cooldown is needed to retrigger. Motion
+   sensitivity and Ring cloud latency still determine whether/when someone approaching is detected.
 8. Existing installs must update the **HA automation**, not just the app. Replace
    the existing package file and reload automations, or copy the complete
    [motion_automation.yaml](home_assistant/motion_automation.yaml) into one
    automation's **Edit in YAML** screen and save. Never enable both a package
    automation and a UI copy, or retain a separate press automation. The existing
    package automation ID is preserved. If the snapshot allowlist from step 6 is
-   not configured yet, apply it and restart Core first.
-   Walk into the motion zone, then verify the trace, app history and MQTT entities.
+   not configured yet, apply it and restart Core first. App startup prepares
+   `/share/ring_face` (0755) and its dedicated `capture` directory (sticky 1777)
+   so Core can write across container user IDs. This shared exchange is temporary;
+   biometric data and retained images stay private under `/data`.
+   Walk into the motion zone, or use **Run actions** for a controlled snapshot
+   pipeline test (0.1.1 supports manual runs with unique IDs). Verify the trace,
+   app history and MQTT entities.
    Failed/missing/invalid snapshots retry up to three times. Successful captures
    stop after the first result. Wait at least 60 seconds and for motion to clear
    before a second test. For press-only operation instead, replace the trigger
@@ -160,7 +176,8 @@ names, so restrict broker access and treat HA Recorder/backups as personal data.
   most 640 pixels, and input is bounded to 6 MiB / 12 megapixels then normalized
   to at most 1280 pixels. One active job and two queued commands; enrollment and
   capture share the same engine lock. A native inference overrun terminates the
-  subprocess; the next request recreates it. Enrollment is best performed while
+  subprocess; the next request recreates it. Snapshot file readiness has its own
+  configurable 1–60-second deadline (default 10), independent of inference timeout. Enrollment is best performed while
   capture automation is disabled to avoid busy-engine errors.
 - Detection score cutoff is 0.80, minimum identity face size 60 pixels on the
   normalized image. Zero faces → `no_face`; multiple detected faces → `ambiguous`
@@ -203,7 +220,7 @@ python3 scripts/fetch_sample.py /tmp/ring-lena.jpg
 .venv/bin/python scripts/check.py
 RING_TEST_MODELS=/tmp/ring-models RING_TEST_IMAGE=/tmp/ring-lena.jpg .venv/bin/pytest -q
 .venv/bin/python scripts/benchmark.py --models /tmp/ring-models --image /tmp/ring-lena.jpg
-docker build --platform linux/amd64 -t ring-face:0.1.0 ring_face
+docker build --platform linux/amd64 -t ring-face:0.1.1 ring_face
 ```
 
 Model fetches require `media.githubusercontent.com`, packages use PyPI, the

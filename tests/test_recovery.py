@@ -92,7 +92,7 @@ def test_fifo_and_capture_directory_symlink_rejected(setup,tmp_path):
     fifo=settings.captures/'capture_00000001_1.jpg';os.mkfifo(fifo)
     with pytest.raises(ValueError):capture_read(settings.captures,'capture_00000001',1,time.time())
     other=tmp_path/'other';other.mkdir();link=tmp_path/'link';link.symlink_to(other)
-    with pytest.raises(OSError):capture_read(link,'capture_00000001',1,time.time())
+    with pytest.raises(ValueError):capture_read(link,'capture_00000001',1,time.time())
 
 
 def test_source_metadata_comparison_never_establishes_freshness():

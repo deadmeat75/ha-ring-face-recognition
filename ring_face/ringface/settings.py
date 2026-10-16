@@ -19,6 +19,7 @@ class Settings:
     ambiguity_margin: float = 0.08
     opencv_threads: int = 1
     processing_timeout: int = 20
+    capture_timeout: int = 10
     history_days: int = 30
     image_days: int = 0
 
@@ -28,6 +29,8 @@ class Settings:
             raise ValueError("Invalid recognition thresholds")
         if not 1 <= self.opencv_threads <= 2 or not 5 <= self.processing_timeout <= 60:
             raise ValueError("Invalid processing limits")
+        if type(self.capture_timeout) is not int or not 1 <= self.capture_timeout <= 60:
+            raise ValueError("Capture timeout must be 1–60 seconds")
         if not 1 <= self.history_days <= 365 or not 0 <= self.image_days <= 30:
             raise ValueError("Invalid retention")
         if not 1 <= self.mqtt_port <= 65535:

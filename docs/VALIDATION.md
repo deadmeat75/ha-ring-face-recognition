@@ -1,6 +1,7 @@
 # Validation record
 
-Executed in this Linux amd64 cloud workspace, 2026-10-15. This is development
+Executed in this Linux amd64 cloud workspace, 2026-10-15 (America/Los_Angeles).
+Updated for app version 0.1.1. This is development
 validation, not a claim of installation on the owner's HAOS laptop.
 
 | Check | Outcome |
@@ -10,12 +11,15 @@ validation, not a claim of installation on the owner's HAOS laptop.
 | Model provenance and acquisition | PASS; upstream Git LFS size/hash matched both downloaded ONNX files |
 | Actual model tests | PASS; no-face image, single face with 128-float embedding, repeat matching, two-face ambiguity |
 | Real-photo enrollment → recognition → private history | PASS; varied synthetic transformations of a public sample, real YuNet/SFace, actual SQLite and Flask routes |
-| Automated suite | 35 passed, 1 skipped (existing live MQTT broker unavailable in cloud) |
+| Automated suite | 52 passed, 1 skipped (existing live MQTT broker unavailable in cloud) |
 | MQTT discovery | PASS; five stable unique IDs, desired entity IDs, availability, expiration, JSON structure, Jinja rendering, reconnect/HA birth callbacks, no templates in payloads |
 | SQLite / restart / migrations | PASS; persisted event deduplication, reopening DB, schema v1→v2 migration, rejecting future schema, deletion and retention |
 | Security and recovery checks | PASS; ingress peer enforcement, forwarded-header rejection, CSRF, upload limits/type/quality validation, path/symlink/FIFO protection, bounded queue, engine timeout termination, invalid/repeated images, source metadata diagnostics |
 | Full image build | PASS; final `linux/amd64` Python Debian image, model files and license notices included |
 | Runtime container functional test | PASS; actual model → event → SQLite → authenticated history, direct access rejected, 1 CPU and 384 MiB limit, exit 0, no OOM kill |
+| Shared snapshot handoff | PASS; separately rendered HA camera/MQTT paths match, delayed writes beyond 2s succeed, default/configured timeout and specific rejections verified |
+| Two-container shared volume | PASS; same `/share` volume, writer UID 65534, app UID 0, image delayed 3 seconds, actual face detection, private retained image, `unknown` record in ~3890 ms |
+| Shared mount detection | PASS; Linux mount table accepts same-device bind mounts, rejects missing/read-only mappings; startup prepares shared permissions under private umask |
 | Home Assistant YAML | PASS: YAML parsing, Jinja syntax and packaging invariants against documented current app conventions. Live Core/Supervisor schema acceptance is UNVERIFIED. |
 | Lock/announcement/notification behavior | No implementation or HA action exists; inspected automation services and app interfaces |
 
@@ -38,13 +42,14 @@ Commands used:
 
 ```sh
 sh scripts/prepare_cloud.sh
+python scripts/verify_handoff_containers.py --sample /workspace/ring-lena.jpg
 RING_TEST_MODELS=/workspace/ring-models RING_TEST_IMAGE=/workspace/ring-lena.jpg .venv/bin/python -m pytest -q
 .venv/bin/python scripts/benchmark.py --models /workspace/ring-models --image /workspace/ring-lena.jpg
 .venv/bin/python scripts/benchmark.py --models /workspace/ring-models --image /workspace/ring-large.jpg
 python scripts/build_cloud.py
 ```
 
-For the image smoke test, create a temporary container from `ring-face:0.1.0`
+For the image smoke test, create a temporary container from `ring-face:0.1.1`
 with `--memory=384m --memory-swap=384m --cpus=1 -e PYTHONPATH=/app` and command
 `python /tmp/container_smoke.py`. Copy `scripts/container_smoke.py` to that path
 and the downloaded public sample to `/tmp/sample.jpg` using `docker cp`, start
@@ -63,6 +68,28 @@ The initial detector score cutoff 0.90 missed both faces in a resized two-face
 fixture (scores about 0.869). The implemented cutoff is 0.80; the real two-face
 test now passes without changing the conservative identity threshold 0.55.
 
+## Snapshot handoff 0.1.1 regression findings
+
+The original 0.1.0 reader hardcoded a two-second wait and hid all reader errors.
+0.1.1 uses a configurable 10-second default and specific diagnostics, shared
+permissions, a required read/write `/share` mount and a single path variable in
+both HA's camera service and MQTT command. It supports manual automation actions
+and the confirmed `sensor.doorbell_camera_last_motion` trigger. See
+[exact live update/verification instructions](SNAPSHOT_HANDOFF.md).
+
+An initial strict `Path.is_mount()` startup check in development rejected a valid
+same-device Docker shared volume. Inspection of `/proc/self/mountinfo` confirmed
+the mount; the implementation now checks that Linux table for a read/write
+`/share` mount. The cross-container test passed after this correction. No such
+strict stat-based check was published to main.
+
+The cross-container fixture uses the production MQTT message callback,
+`Service`, models, SQLite and
+private retained-image path. The writer is a filesystem stand-in for Core; it
+**does not execute HA's actual `camera.snapshot` service** or connect to the
+owner's broker. YAML/action/template contract tests complement this check; the
+real Core service call still needs the live acceptance steps below.
+
 ## Required HAOS acceptance checklist (not performed here)
 
 1. Back up HA and check available RAM, swap activity, existing app load, Core
@@ -78,7 +105,7 @@ test now passes without changing the conservative identity threshold 0.55.
    If using it, supply the named `RING_TEST_MQTT_*` process variables securely,
    without exposing passwords in shell history, source or chat. Test ACLs may
    need a temporary-topic allowance. This test was skipped here.
-4. Run HA **Check configuration** after merging the package, apply the allowlist,
+4. Follow docs/SNAPSHOT_HANDOFF.md for the 0.1.1 update. Run HA **Check configuration** after merging the package, apply the allowlist,
    and verify a real press through Ring entities. Confirm the shared directory
    is actually visible to both Core and the app. Native YAML has not been loaded
    into a live HA Core configuration in this cloud machine.

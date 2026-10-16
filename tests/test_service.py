@@ -5,7 +5,7 @@ import time
 from datetime import datetime,timezone
 import pytest
 from ringface.engine import rank
-from ringface.images import capture_read,decode
+from ringface.images import CaptureError,capture_read,decode
 from ringface.service import timestamp
 from conftest import jpeg
 
@@ -82,10 +82,13 @@ def test_duplicate_source_and_nearby_press(setup):
 
 def test_invalid_capture_retry(setup,monkeypatch):
     settings,store,engine,service=setup
-    # Failure path without a two-second test delay.
-    import ringface.service as module
-    counter=iter([0,0,3,4])
-    monkeypatch.setattr(module.time,'monotonic',lambda:next(counter))
+    # Exercise the real failure path with a virtual ten-second polling deadline.
+    import ringface.images as module
+    from types import SimpleNamespace
+    clock=[0.0]
+    def sleep(delay): clock[0]+=delay
+    monkeypatch.setattr(module,'time',SimpleNamespace(monotonic=lambda:clock[0],time=time.time,sleep=sleep))
+    monkeypatch.setattr(service.stop,'wait',lambda delay: sleep(delay) or False)
     item=command();run(service,item)
     assert store.event(item['event_id'])['status']=='capture_failed'
     monkeypatch.undo()
@@ -129,7 +132,7 @@ def test_image_validation(setup):
     with pytest.raises(ValueError):
         capture_read(settings.captures,'capture_00000001',1,time.time())
     file.unlink();file.symlink_to('/etc/passwd')
-    with pytest.raises(OSError):
+    with pytest.raises(CaptureError):
         capture_read(settings.captures,'capture_00000001',1,time.time())
     with pytest.raises(ValueError):
         capture_read(settings.captures,'../../etc/passwd',1,time.time())

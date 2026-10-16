@@ -7,7 +7,7 @@ import threading
 import time
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
-from .images import ID, capture_read
+from .images import ID, CaptureError, wait_for_capture, prepare_capture_directory, share_mount_present
 from .engine import rank
 
 LOG = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ class Service:
             epoch = timestamp(item["pressed_at"])
             captured = timestamp(item["captured_at"])
             now = time.time()
-            if not now - 90 <= epoch <= now + 5 or not epoch - 5 <= captured <= now + 5:
+            if not now - 300 <= epoch <= now + 5 or not epoch - 5 <= captured <= now + 5:
                 return False
             item["epoch"], item["capture_epoch"] = epoch, captured
             with self.enqueue_lock:
@@ -76,16 +76,14 @@ class Service:
                      face_count=0, snapshot=None, trusted=0, duration_ms=0, freshness="unverified", error=None,
                      attempt=item["attempt"], image_hash=None, corrected_identity=None, source_event_id=item["source_event_id"])
         try:
-            raw = None
-            deadline = time.monotonic() + 2
-            while True:
-                try:
-                    raw, metadata = capture_read(self.settings.captures, item["event_id"], item["attempt"], item["capture_epoch"])
-                    break
-                except (OSError, ValueError):
-                    if time.monotonic() >= deadline:
-                        raise ValueError("Missing, stale, or invalid snapshot after bounded wait")
-                    time.sleep(0.25)
+            expected = self.settings.captures / f"{item['event_id']}_{item['attempt']}.jpg"
+            supplied = item.get("snapshot_path")
+            if supplied is not None and supplied != str(expected):
+                raise CaptureError("path_mismatch", "Automation snapshot_path differs from the app's expected shared path")
+            LOG.info(json.dumps({"event":"capture_wait", "id":item["event_id"], "attempt":item["attempt"],
+                                 "path":str(expected), "timeout_seconds":self.settings.capture_timeout}))
+            raw, metadata = wait_for_capture(self.settings.captures, item["event_id"], item["attempt"],
+                                             item["capture_epoch"], self.settings.capture_timeout, self.stop)
             digest = hashlib.sha256(raw).hexdigest()
             event["image_hash"] = digest
             event["image_metadata"] = json.dumps(metadata)
@@ -112,13 +110,18 @@ class Service:
         except Exception as e:
             # Deliberately do not log payloads, credentials or image bytes.
             event["error"] = str(e)[:180]
-            LOG.warning(json.dumps({"event":"processing_failed", "id":event["id"], "status":event["status"]}))
+            LOG.warning(json.dumps({"event":"processing_failed", "id":event["id"], "status":event["status"],
+                                    "reason":getattr(e,"code","processing_error"), "detail":event["error"],
+                                    "path":str(self.settings.captures / f"{item['event_id']}_{item['attempt']}.jpg")}))
         finally:
             event["duration_ms"] = round((time.monotonic() - started) * 1000)
             self.store.save_event(event)
             self.health = "inference_error" if event["status"] == "error" else ("capture_failed" if event["status"] == "capture_failed" else "ready")
             path = self.settings.captures / f"{item['event_id']}_{item['attempt']}.jpg"
-            path.unlink(missing_ok=True)
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                LOG.warning(json.dumps({"event":"capture_cleanup_failed", "path":str(path)}))
             # State is live-only. Availability and expiration prevent old recognition
             # state being represented as a newly observed visitor after reconnect.
             self.publish(BASE + "/state", self.state(event), retain=False)
@@ -160,7 +163,11 @@ class Service:
 
 
     def start(self):
-        self.settings.captures.mkdir(parents=True, exist_ok=True)
+        if self.settings.captures == Path("/share/ring_face/capture") and not share_mount_present():
+            raise RuntimeError("share_mount_missing: /share must be mounted by Supervisor; update the app with share read/write access")
+        prepare_capture_directory(self.settings.captures)
+        LOG.info(json.dumps({"event":"capture_directory_ready", "path":str(self.settings.captures),
+                             "directory_mode":"1777", "capture_timeout":self.settings.capture_timeout}))
         self.maintenance()
         self.thread = threading.Thread(target=self.run, daemon=True)
         self.thread.start()
@@ -168,4 +175,4 @@ class Service:
     def close(self):
         self.stop.set()
         if self.thread:
-            self.thread.join(timeout=self.settings.processing_timeout + 5)
+            self.thread.join(timeout=self.settings.capture_timeout + self.settings.processing_timeout + 5)

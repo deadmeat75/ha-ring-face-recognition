@@ -25,6 +25,15 @@ headroom during your normal peak load. Do not add swap or modify the HAOS host a
 an installation workaround. The app has no unsupported Supervisor memory-limit
 setting; inference deadlines do not guarantee an operating-system memory limit.
 
+## Snapshot handoff update
+
+For `capture_failed` at about 2005 ms on 0.1.0, install **0.1.1** and follow
+[the complete handoff update guide](SNAPSHOT_HANDOFF.md), including the HA
+allowlist and replacement automation. The old two-second catch-all error does
+not distinguish a missing mount, blocked Core write, path mismatch or bad image.
+0.1.1 logs the exact expected `/share` path and a specific reason. Raising a
+wait timeout cannot repair a failed `camera.snapshot` service call by itself.
+
 ## Diagnosis
 
 | Symptom | Check / action |
@@ -33,8 +42,8 @@ setting; inference deadlines do not guarantee an operating-system memory limit.
 | MQTT unavailable | Reuse your existing Mosquitto host/port/user; check broker log for this client; verify TLS port and certificate trust. Do not install a second broker. |
 | No entities | Existing MQTT integration discovery must use standard `homeassistant` prefix. Reconnect/restart the app, inspect device entities for naming collisions. Only one app instance may use the fixed client ID. |
 | Sensors become unavailable after a few minutes | Intentional expiration: live state is not retained. Durable history remains in ingress. Health should update every 30 seconds. |
-| Capture failed | Inspect HA automation trace, camera availability, directory allowlist and `/share/ring_face/capture` creation. Start the app before enabling the package. The old `/config/www/ring_test.jpg` is not this app's exchange path. |
-| No event on physical press | Inspect the binary sensor transitions. Use the documented event-entity replacement if required, never both triggers. An automation manual-run has no `trigger.to_state`, so use a physical press for this test. |
+| Capture failed | Read the specific error (`missing`, `permission_denied`, `path_mismatch`, `empty`, `invalid_image`, `stale`). Inspect HA automation trace, camera availability, directory allowlist and `/share/ring_face/capture` creation. Start the app before enabling the package. The old `/config/www/ring_test.jpg` is not this app's exchange path. |
+| No event on physical press | Inspect the binary sensor transitions. Use the documented event-entity replacement if required, never both triggers. 0.1.1 also supports Run actions with a unique manual event ID; that tests the snapshot pipeline but not the physical motion trigger. |
 | Capture retries but completed event exists | MQTT result can race the wait subscription. The app deduplicates further attempts. Leftover captures expire automatically. |
 | `capture_failed` after Ring outage | Three attempts are exhausted, or command/file timestamps exceed the bounded window. A later physical press is a new event. Check machine clock synchronization through supported HA settings. |
 | Recognized an old view | Source freshness is unverified. Exact repeated frames are marked repeated, but different encodings can escape hash detection. Check the Ring app for cloud latency; do not use this result for access. |
