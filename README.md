@@ -16,7 +16,7 @@ warnings); no observation becomes a verified access event.
 
 ## Update an existing installation
 
-**Latest: 0.2.1 — completed Ring recordings.** Investigation of released HA
+**Latest: 0.2.2 — completed Ring recordings.** Investigation of released HA
 Ring code confirmed that `camera.snapshot` uses a cached still extracted from
 recorded video, while live view uses a separate WebRTC path. An empty early
 frame can therefore persist even while Ring's phone app shows a live visitor.
@@ -239,7 +239,7 @@ python3 scripts/fetch_sample.py /tmp/ring-lena.jpg
 .venv/bin/python scripts/check.py
 RING_TEST_MODELS=/tmp/ring-models RING_TEST_IMAGE=/tmp/ring-lena.jpg .venv/bin/pytest -q
 .venv/bin/python scripts/benchmark.py --models /tmp/ring-models --image /tmp/ring-lena.jpg
-docker build --platform linux/amd64 -t ring-face:0.2.1 ring_face
+docker build --platform linux/amd64 -t ring-face:0.2.2 ring_face
 ```
 
 Model fetches require `media.githubusercontent.com`, packages use PyPI, the

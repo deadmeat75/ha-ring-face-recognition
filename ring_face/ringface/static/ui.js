@@ -34,7 +34,7 @@ async function history() {
     const row = document.createElement("article");
     const line = document.createElement("p"); line.textContent = `${e.local_time} · ${e.corrected_identity || e.identity} · ${e.status} · score ${e.score === null ? "—" : e.score.toFixed(3)} · faces ${e.face_count}`; row.append(line);
     const detail = document.createElement("small"); detail.textContent = `Freshness: ${e.freshness}; trusted label: ${!!e.trusted}; ${e.duration_ms} ms; ID ${e.id}${e.error ? "; " + e.error : ""}${e.corrected_identity ? "; original: " + e.identity : ""}`; row.append(detail);
-    if (e.snapshot) button(row, "View private snapshot", () => { const img = document.createElement("img"); img.src="api/history/"+encodeURIComponent(e.id)+"/image"; img.alt="Visitor snapshot"; row.append(img); });
+    if (e.snapshot) button(row, "View private snapshot", () => { const existing = row.querySelector("img"); if (existing) { existing.remove(); return; } const img = document.createElement("img"); img.src="api/history/"+encodeURIComponent(e.id)+"/image"; img.alt="Visitor snapshot"; row.append(img); });
     button(row, "Correct label", async () => { const identity=prompt("Corrected identity (does not retrain)",e.corrected_identity || e.identity); if(identity) await api("history/"+e.id,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({identity})}); await history(); });
     button(row, "Delete record", async () => { if(confirm("Delete this event and its retained image?")){await api("history/"+e.id,{method:"DELETE"}); await history();} });
     el("history").append(row);

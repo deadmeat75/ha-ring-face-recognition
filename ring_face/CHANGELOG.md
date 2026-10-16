@@ -1,3 +1,8 @@
+# 0.2.2
+
+- Toggle a single private snapshot per history entry instead of appending a new
+  image on every click. Snapshot files and retention are unchanged.
+
 # 0.2.1
 
 - Preserve every no-face diagnostic snapshot for normal configured Image days;

@@ -1,6 +1,6 @@
 """Verify two containers share the same capture file; installs no MQTT broker.
 Usage: python scripts/verify_handoff_containers.py --sample /path/to/public.jpg
-Requires a built ring-face:0.2.1 image. Does not contact Home Assistant or Ring.
+Requires a built ring-face:0.2.2 image. Does not contact Home Assistant or Ring.
 """
 import argparse
 from pathlib import Path
@@ -25,7 +25,7 @@ def main():
     try:
         def create(role,user='0:0'):
             cid=docker('create','--user',user,'--memory=384m','--memory-swap=384m','--cpus=1',
-                       '-v',volume+':/share','-e','PYTHONPATH=/app','ring-face:0.2.1',
+                       '-v',volume+':/share','-e','PYTHONPATH=/app','ring-face:0.2.2',
                        'python','/tmp/handoff.py',role,event_id,*(['recording'] if args.recording else []),capture_output=True).stdout.strip()
             ids.append(cid)
             docker('cp',str(fixture),cid+':/tmp/handoff.py',capture_output=True)

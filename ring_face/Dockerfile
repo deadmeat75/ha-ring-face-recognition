@@ -13,6 +13,6 @@ RUN --mount=type=secret,id=build_ca \
     python fetch_models.py /opt/models
 COPY licenses /licenses
 COPY ringface ./ringface
-LABEL io.hass.name="Ring Face Recognition" io.hass.description="Silent local visitor recognition" io.hass.type="addon" io.hass.version="0.2.1" io.hass.arch="amd64"
+LABEL io.hass.name="Ring Face Recognition" io.hass.description="Silent local visitor recognition" io.hass.type="addon" io.hass.version="0.2.2" io.hass.arch="amd64"
 EXPOSE 8099
 CMD ["python", "-m", "ringface"]
