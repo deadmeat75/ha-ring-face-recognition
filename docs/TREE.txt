@@ -6,6 +6,7 @@ ha-ring-face-recognition/
   docs/CAPTURE_RECOVERY.md
   docs/MODELS.md
   docs/OPERATIONS.md
+  docs/RING_RECORDINGS.md
   docs/SECURITY.md
   docs/SNAPSHOT_HANDOFF.md
   docs/TREE.txt
@@ -13,6 +14,7 @@ ha-ring-face-recognition/
   home_assistant/dashboard.yaml
   home_assistant/event_trigger_alternative.yaml
   home_assistant/motion_automation.yaml
+  home_assistant/recording_automation.yaml
   home_assistant/ring_face_package.yaml
   pytest.ini
   repository.yaml
@@ -39,6 +41,7 @@ ha-ring-face-recognition/
   ring_face/ringface/static/style.css
   ring_face/ringface/static/ui.js
   ring_face/ringface/store.py
+  ring_face/ringface/video.py
   ring_face/ringface/web.py
   scripts/benchmark.py
   scripts/build_cloud.py
@@ -46,6 +49,7 @@ ha-ring-face-recognition/
   scripts/container_smoke.py
   scripts/fetch_sample.py
   scripts/handoff_container_fixture.py
+  scripts/make_test_recording.py
   scripts/prepare_cloud.sh
   scripts/verify_handoff_containers.py
   tests/conftest.py
@@ -55,6 +59,7 @@ ha-ring-face-recognition/
   tests/test_models.py
   tests/test_mqtt.py
   tests/test_no_face_cleanup.py
+  tests/test_recordings.py
   tests/test_recovery.py
   tests/test_service.py
   tests/test_web_store.py

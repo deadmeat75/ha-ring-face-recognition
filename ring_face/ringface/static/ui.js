@@ -60,6 +60,16 @@ async function refreshCaptureStatus() {
   const e = s.latest;
   row.textContent = e ? `Last capture: ${e.local_time} · ${e.status} · ${e.face_count} detected faces${e.error ? " · " + e.error : ""}` : "No capture has reached visitor history yet. Check the HA automation trace if a manual capture produces no command.";
   box.append(row);
+  if (e && e.image_metadata) {
+    try {
+      const meta=JSON.parse(e.image_metadata);
+      const source=document.createElement("p");
+      source.textContent=meta.source === "ring_completed_recording"
+        ? `Source: completed Ring recording ${meta.recording_id}; selected frame at ${meta.selected_seconds}s; sampled ${meta.sampled_seconds.join(", ")}s. Delayed recording analysis; source authenticity/freshness unverified.`
+        : "Source: HA camera snapshot. Ring may supply a cached recording still; this is not the Ring app's live feed. Use the completed-recording automation for recorded visitors.";
+      box.append(source);
+    } catch (_) { /* Older diagnostic metadata can be absent. */ }
+  }
   if (e && e.status === "no_face") {
     const note = document.createElement("p");
     note.textContent = "Capture ran, but the detector found no face. This event is hidden from normal visitor history. Ring may return an early or cached frame; source freshness remains unverified.";

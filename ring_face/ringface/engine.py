@@ -38,40 +38,61 @@ def _process(conn, models, threads):
     cv2.ocl.setUseOpenCL(False)
     detector = cv2.FaceDetectorYN.create(str(Path(models) / "face_detection_yunet_2023mar.onnx"), "", (320, 320), 0.8, 0.3, 100)
     recognizer = cv2.FaceRecognizerSF.create(str(Path(models) / "face_recognition_sface_2021dec.onnx"), "")
+    def analyze_image(image, include_image=False):
+        height, width = image.shape[:2]
+        scale = min(1.0, 640 / max(width, height))
+        preview = cv2.resize(image, (max(1, int(width * scale)), max(1, int(height * scale))))
+        detector.setInputSize((preview.shape[1], preview.shape[0]))
+        _, faces = detector.detect(preview)
+        if faces is not None:
+            faces[:, :14] /= scale
+        features, warnings = [], []
+        for face in [] if faces is None else faces:
+            # Small faces may be visible but cannot yield a reliable identity.
+            if min(face[2], face[3]) < 60:
+                warnings.append("Face smaller than 60 pixels; use a closer, sharp photo")
+                features.append(None)
+                continue
+            aligned = recognizer.alignCrop(image, face)
+            if cv2.Laplacian(aligned, cv2.CV_64F).var() < 50:
+                warnings.append("Photo may be blurred")
+            vector = recognizer.feature(aligned).flatten()
+            norm = np.linalg.norm(vector)
+            if not np.isfinite(norm) or norm < 1e-6:
+                raise ValueError("Invalid embedding")
+            vector /= norm
+            features.append(vector.tolist())
+        answer = {"features":features,"warnings":warnings,
+                  "face_area":max((float(f[2]*f[3]) for f in faces),default=0) if faces is not None else 0}
+        if include_image:
+            ok,encoded=cv2.imencode('.jpg',image,[cv2.IMWRITE_JPEG_QUALITY,90])
+            if not ok:raise ValueError("Cannot encode sampled frame")
+            answer['image']=encoded.tobytes()
+        return answer
+
     conn.send({"ready": True})
     while True:
+        try:message=conn.recv()
+        except EOFError:break
         try:
-            raw = conn.recv()
-        except EOFError:
-            break
-        try:
-            image = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
-            height, width = image.shape[:2]
-            scale = min(1.0, 640 / max(width, height))
-            preview = cv2.resize(image, (max(1, int(width * scale)), max(1, int(height * scale))))
-            detector.setInputSize((preview.shape[1], preview.shape[0]))
-            _, faces = detector.detect(preview)
-            if faces is not None:
-                faces[:, :14] /= scale
-            features, warnings = [], []
-            for face in [] if faces is None else faces:
-                # Small faces may be visible but cannot yield a reliable identity.
-                if min(face[2], face[3]) < 60:
-                    warnings.append("Face smaller than 60 pixels; use a closer, sharp photo")
-                    features.append(None)
-                    continue
-                aligned = recognizer.alignCrop(image, face)
-                if cv2.Laplacian(aligned, cv2.CV_64F).var() < 50:
-                    warnings.append("Photo may be blurred")
-                vector = recognizer.feature(aligned).flatten()
-                norm = np.linalg.norm(vector)
-                if not np.isfinite(norm) or norm < 1e-6:
-                    raise ValueError("Invalid embedding")
-                vector /= norm
-                features.append(vector.tolist())
-            conn.send({"features": features, "warnings": warnings, "peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss})
-        except Exception:
-            conn.send({"error": "Image inference failed"})
+            if isinstance(message,dict):
+                from .video import video_frames
+                samples=[]
+                for offset,image in video_frames(message['video_path']):
+                    sample=analyze_image(image,include_image=True)
+                    sample['offset']=offset
+                    samples.append(sample)
+                result={"samples":samples}
+            else:
+                image=cv2.imdecode(np.frombuffer(message,np.uint8),cv2.IMREAD_COLOR)
+                result=analyze_image(image)
+            result['peak_rss_kib']=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            conn.send(result)
+        except Exception as error:
+            from .images import CaptureError
+            if isinstance(error,CaptureError):
+                conn.send({"capture_error":str(error),"capture_code":error.code})
+            else:conn.send({"error":"Recording or image inference failed"})
 
 
 class Engine:
@@ -81,6 +102,12 @@ class Engine:
         self.peak_rss_kib = 0
 
     def analyze(self, raw):
+        return self._request(raw)
+
+    def analyze_video(self, path):
+        return self._request({"video_path":str(path)})
+
+    def _request(self, raw):
         if not self.lock.acquire(timeout=1):
             raise RuntimeError("Recognition engine busy; retry later")
         try:
@@ -104,6 +131,9 @@ class Engine:
                 self._stop()
                 raise TimeoutError("Recognition deadline exceeded; engine terminated")
             result = self.conn.recv()
+            if "capture_error" in result:
+                from .images import CaptureError
+                raise CaptureError(result['capture_code'],result['capture_error'].split(': ',1)[-1])
             if "error" in result:
                 raise ValueError(result["error"])
             self.peak_rss_kib = result["peak_rss_kib"]

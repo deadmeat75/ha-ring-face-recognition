@@ -1,4 +1,13 @@
-# Operations and troubleshooting
+# Recommended Ring source (0.2.0)
+
+Native Ring camera.snapshot can be a cached still from recorded video while the
+phone app shows a separate WebRTC live feed. For an empty-porch still while a
+saved clip contains a person, use [RING_RECORDINGS.md](RING_RECORDINGS.md) and
+recording_automation.yaml. Existing snapshot handoff fixes below remain useful
+for the legacy JPEG route; they do not turn a cached recording still into live
+video. Ring recordings must finish/upload before sparse local frame analysis.
+
+## Operations and troubleshooting
 
 ## Resources
 

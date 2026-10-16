@@ -42,3 +42,11 @@ and hidden no-face results. Its status refresh does not trigger the camera.
 With Image days enabled, one newest no-face image is retained for up to one day;
 older no-face pictures are discarded. Update both the app and HA automation,
 as detailed in [Capture recovery](../docs/CAPTURE_RECOVERY.md).
+
+## Ring recordings (0.2.0)
+
+Use the [completed-recording setup](../docs/RING_RECORDINGS.md) for Ring. Native
+camera.snapshot can return a cached first/early recording frame; Ring WebRTC live
+view is a different path. The new workflow downloads each completed event video
+through your existing HA Ring account and Downloader into /share, then analyzes
+up to five local frames. No new heavyweight stack or broker is installed.

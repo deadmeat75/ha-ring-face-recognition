@@ -31,5 +31,10 @@ def templates(value):
         env.parse(value)
 for p in (ROOT / 'home_assistant').glob('*.yaml'):
     templates(yaml.safe_load(p.read_text()))
+recording = yaml.safe_load((ROOT / 'home_assistant/recording_automation.yaml').read_text())
+assert recording['triggers'][0]['attribute']=='last_video_id'
+assert recording['mode']=='queued' and recording['max']==2
+assert any(a.get('action')=='downloader.download_file' for a in recording['actions'])
+assert not any(a.get('action')=='camera.snapshot' for a in recording['actions'])
 json.loads((ROOT / 'ring_face/models.json').read_text())
 print('Python syntax, YAML parsing, packaging invariants: PASS (not a live HA schema check)')

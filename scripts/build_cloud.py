@@ -11,7 +11,7 @@ import sys
 from urllib.parse import urlsplit
 
 root=Path(__file__).resolve().parents[1]
-args=['docker','build','--platform','linux/amd64','-t','ring-face:0.1.3']
+args=['docker','build','--platform','linux/amd64','-t','ring-face:0.2.0']
 if '--deps-only' in sys.argv:
     args+=['--target','runtime-deps']
 seen=set()

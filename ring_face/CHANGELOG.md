@@ -1,3 +1,17 @@
+# 0.2.0
+
+- Add a completed-recording route for Ring: native camera.snapshot may return a
+  cached still from the beginning of a recording, independently of WebRTC live view.
+- New recording-ready automation captures each new Ring last_video_id, downloads
+  its MP4 through HA Downloader into /share, and sends only file/record IDs over MQTT.
+- Use the existing OpenCV wheel's FFmpeg decoder: at most five local CPU frame seeks,
+  one inference process/thread, bounded native deadline, 64 MiB input and 180s duration.
+- Reject invalid/stale/unsafe recordings, private-copy shared input, and remove videos
+  after processing. Keep only the selected private JPEG according to existing retention.
+- Compare all sampled faces conservatively; multiple or inconsistent faces produce
+  ambiguous rather than an arbitrarily chosen identity. No verified-freshness claim.
+- Preserve snapshot command compatibility, history/schema, enrollment and the existing broker.
+
 # 0.1.3
 
 - Fix fast-result loss in the automation: completion checks event/attempt/status attributes

@@ -105,3 +105,22 @@ implemented. Detection can miss a second person, and match errors vary with
 lighting, pose, age and training biases. Quality warnings are heuristics. These
 limits are why the app is a silent history tool and its packaging stage is
 experimental. Reporting `recognized` does not change these limits.
+
+## Completed-recording path (0.2.0)
+
+HA Downloader obtains the signed URL using the existing Ring integration; the
+app receives only a validated ID and local MP4 path. URLs / Ring tokens never
+enter the app, its MQTT payloads or DB. Protect HA traces, which may include
+Downloader URLs. The camera ready-video ID and download URL are taken from one
+triggering HA state; later queued jobs cannot silently substitute a different
+URL. The separate recording timestamp sensor is diagnostic metadata, not an
+authenticated frame timestamp or proof of exact motion-event correlation.
+
+The app validates a regular non-symlink shared file, bounded size/mtime, unchanged
+copy metadata, MP4 header, frame dimensions/duration, and a claimed recording age
+of at most ten minutes. It reads via a private copy and limits one decoder thread
+and five samples under a killable native deadline. Decoder network protocols and
+external data references are disabled. Temporary shared/private MP4s are deleted;
+only the selected private JPEG can follow image retention. Multiple/inconsistent
+faces across samples remain ambiguous. All freshness stays unverified/repeated;
+recorded-video matching cannot authorize any access-control action.

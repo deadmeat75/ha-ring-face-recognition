@@ -10,9 +10,10 @@ import time
 
 def main():
     role,event_id=sys.argv[1:3]
+    recording=len(sys.argv)>3 and sys.argv[3]=="recording"
     captures=Path('/share/ring_face/capture')
     ready=captures.parent/'reader-ready'
-    path=captures/f'{event_id}_1.jpg'
+    path=captures/f"{event_id}_1.{'mp4' if recording else 'jpg'}"
     if role=='prepare':
         from ringface.images import prepare_capture_directory
         os.umask(0o077)
@@ -25,7 +26,7 @@ def main():
             if time.monotonic()>deadline:raise RuntimeError('Reader never became ready')
             time.sleep(.1)
         time.sleep(3)
-        path.write_bytes(Path('/tmp/sample.jpg').read_bytes())
+        path.write_bytes(Path('/tmp/source_media').read_bytes())
         print(json.dumps({'writer_uid':os.geteuid(),'core_equivalent_path':str(path),'bytes':path.stat().st_size}))
     elif role=='read':
         from ringface.settings import Settings
@@ -41,6 +42,11 @@ def main():
                 now=datetime.now(timezone.utc).isoformat()
                 payload={'event_id':event_id,'source_event_id':event_id,'pressed_at':now,
                          'captured_at':now,'attempt':1,'snapshot_path':str(path)}
+                if recording:
+                    from datetime import timedelta
+                    payload.pop('snapshot_path')
+                    payload.update(media_type='recording',recording_id=event_id.removeprefix('ring_recording_'),
+                                   recording_at=(datetime.now(timezone.utc)-timedelta(seconds=60)).isoformat(),recording_path=str(path))
                 # Route a real Paho message object through the production MQTT
                 # callback; no network broker is started or required by this fixture.
                 from types import SimpleNamespace
@@ -63,7 +69,10 @@ def main():
                 assert (settings.data.stat().st_mode&0o077)==0
                 print(json.dumps({'app_uid':os.geteuid(),'app_path':str(path),'status':event['status'],
                                   'face_count':event['face_count'],'duration_ms':event['duration_ms'],
-                                  'freshness':event['freshness'],'private_retained_image':True}))
+                                  'freshness':event['freshness'],'private_retained_image':True,'media_type':'recording' if recording else 'snapshot',
+                                  'metadata':json.loads(event['image_metadata']) if recording else None,
+                                  'engine_peak_mib':engine.peak_rss_kib/1024,
+                                  'cgroup_peak_mib':int(Path('/sys/fs/cgroup/memory.peak').read_text())/1024**2 if Path('/sys/fs/cgroup/memory.peak').exists() else None}))
             finally:
                 service.close();engine.close();store.close();ready.unlink(missing_ok=True)
     else:raise ValueError('Unknown fixture role')

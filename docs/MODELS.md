@@ -43,3 +43,12 @@ https://github.com/home-assistant/developers.home-assistant/tree/master/docs/app
 uses **apps**, retains app/add-on config conventions, requires ingress peer
 `172.30.32.2`, supports `/share` mounts, and explicitly says the legacy
 `build.yaml` is no longer read. Build metadata therefore lives in the Dockerfile.
+
+## Completed-recording decoder
+
+0.2.0 uses the FFmpeg backend already bundled in opencv-python-headless, with
+CAP_PROP_N_THREADS=1 and hardware acceleration disabled. No ffmpeg CLI, Torch,
+new inference server or network decoder is required in the app. Only private
+local MP4 input is passed to the worker; network protocols and external MP4 data
+references are disabled. At most five frames are decoded/analyzed under the
+same native processing timeout. Engine features remain IPC-only and private.

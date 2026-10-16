@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 from .images import ID, CaptureError, wait_for_capture, prepare_capture_directory, share_mount_present
 from .engine import rank
+from .video import private_recording, select_recording_sample
 
 LOG = logging.getLogger(__name__)
 BASE = "ring_face_recognition"
@@ -49,6 +50,10 @@ class Service:
             item = json.loads(payload)
             if not isinstance(item,dict):
                 return self.reject("invalid_payload")
+            media_type=item.get("media_type","snapshot")
+            if media_type not in {"snapshot","recording"}:
+                return self.reject("invalid_media_type")
+            item["media_type"]=media_type
             for key in ("event_id", "source_event_id"):
                 if not isinstance(item.get(key),str) or not ID.fullmatch(item[key]):
                     return self.reject("invalid_identifier")
@@ -59,6 +64,15 @@ class Service:
             now = time.time()
             if not now - 300 <= epoch <= now + 5 or not epoch - 5 <= captured <= now + 5:
                 return self.reject("expired_or_invalid_command_time")
+            if media_type == "recording":
+                recording_id=item.get("recording_id")
+                if not isinstance(recording_id,str) or not recording_id.isascii() or not recording_id.isdigit() or len(recording_id)>40:
+                    return self.reject("invalid_recording_id")
+                if item["event_id"] != "ring_recording_"+recording_id or item["source_event_id"] != item["event_id"]:
+                    return self.reject("recording_id_mismatch")
+                epoch=timestamp(item["recording_at"])
+                if not now-600 <= epoch <= now+5:
+                    return self.reject("old_or_future_recording")
             item["epoch"], item["capture_epoch"] = epoch, captured
             with self.enqueue_lock:
                 previous = self.store.event(item["event_id"])
@@ -85,14 +99,29 @@ class Service:
                      face_count=0, snapshot=None, trusted=0, duration_ms=0, freshness="unverified", error=None,
                      attempt=item["attempt"], image_hash=None, corrected_identity=None, source_event_id=item["source_event_id"])
         try:
-            expected = self.settings.captures / f"{item['event_id']}_{item['attempt']}.jpg"
-            supplied = item.get("snapshot_path")
+            recording=item.get("media_type")=="recording"
+            extension="mp4" if recording else "jpg"
+            expected = self.settings.captures / f"{item['event_id']}_{item['attempt']}.{extension}"
+            supplied = item.get("recording_path" if recording else "snapshot_path")
             if supplied is not None and supplied != str(expected):
-                raise CaptureError("path_mismatch", "Automation snapshot_path differs from the app's expected shared path")
+                raise CaptureError("path_mismatch", "Automation media path differs from the app's expected shared path")
             LOG.info(json.dumps({"event":"capture_wait", "id":item["event_id"], "attempt":item["attempt"],
+                                 "media_type":item.get("media_type","snapshot"),
                                  "path":str(expected), "timeout_seconds":self.settings.capture_timeout}))
-            raw, metadata = wait_for_capture(self.settings.captures, item["event_id"], item["attempt"],
-                                             item["capture_epoch"], self.settings.capture_timeout, self.stop)
+            result=None
+            if recording:
+                with private_recording(self.settings.captures,item["event_id"],item["attempt"],item["capture_epoch"],
+                                       self.settings.data/"video_work",self.settings.capture_timeout,self.stop) as (video,metadata):
+                    event["status"]="error"
+                    analyzed=self.engine.analyze_video(video)
+                    raw,result,selected_at=select_recording_sample(analyzed["samples"],self.store.people(vectors=True),
+                                                                  self.settings.similarity_threshold,self.settings.ambiguity_margin)
+                    metadata.update(recording_id=item["recording_id"],recording_at=item["recording_at"],
+                                    sampled_seconds=[s["offset"] for s in analyzed["samples"]],selected_seconds=selected_at,
+                                    source="ring_completed_recording",source_time_comparison="recording_metadata_unverified")
+            else:
+                raw, metadata = wait_for_capture(self.settings.captures, item["event_id"], item["attempt"],
+                                                 item["capture_epoch"], self.settings.capture_timeout, self.stop)
             digest = hashlib.sha256(raw).hexdigest()
             event["image_hash"] = digest
             event["image_metadata"] = json.dumps(metadata)
@@ -104,9 +133,12 @@ class Service:
                 path.write_bytes(raw)
                 event["snapshot"] = path.name
             event["status"] = "error"
-            result = self.engine.analyze(raw)
+            if result is None:
+                result = self.engine.analyze(raw)
             features = result["features"]
-            if any(v is None for v in features):
+            if "decision" in result:
+                event.update(result["decision"])
+            elif any(v is None for v in features):
                 event.update(status="ambiguous" if len(features)>1 else "unknown", face_count=len(features))
             else:
                 event.update(rank(features, self.store.people(vectors=True), self.settings.similarity_threshold, self.settings.ambiguity_margin))
@@ -118,11 +150,12 @@ class Service:
             if result.get("warnings"):
                 event["error"] = "; ".join(result["warnings"])
         except Exception as e:
+            if isinstance(e,CaptureError):event["status"]="capture_failed"
             # Deliberately do not log payloads, credentials or image bytes.
             event["error"] = str(e)[:180]
             LOG.warning(json.dumps({"event":"processing_failed", "id":event["id"], "status":event["status"],
                                     "reason":getattr(e,"code","processing_error"), "detail":event["error"],
-                                    "path":str(self.settings.captures / f"{item['event_id']}_{item['attempt']}.jpg")}))
+                                    "path":str(self.settings.captures / f"{item['event_id']}_{item['attempt']}.{'mp4' if item.get('media_type')=='recording' else 'jpg'}")}))
         finally:
             event["duration_ms"] = round((time.monotonic() - started) * 1000)
             self.store.save_event(event)
@@ -131,7 +164,7 @@ class Service:
             self.store.retention(self.store.setting("history_days",self.settings.history_days),
                                  self.store.setting("image_days",self.settings.image_days))
             self.health = "inference_error" if event["status"] == "error" else ("capture_failed" if event["status"] == "capture_failed" else "ready")
-            path = self.settings.captures / f"{item['event_id']}_{item['attempt']}.jpg"
+            path = self.settings.captures / f"{item['event_id']}_{item['attempt']}.{'mp4' if item.get('media_type')=='recording' else 'jpg'}"
             try:
                 path.unlink(missing_ok=True)
             except OSError:
@@ -148,8 +181,8 @@ class Service:
 
     def maintenance(self):
         self.store.retention(self.store.setting("history_days",self.settings.history_days), self.store.setting("image_days",self.settings.image_days))
-        for path in self.settings.captures.glob("*.jpg"):
-            if path.is_file() and time.time() - path.lstat().st_mtime > 180:
+        for path in self.settings.captures.iterdir():
+            if path.suffix.lower() in {".jpg",".mp4"} and path.is_file() and time.time() - path.lstat().st_mtime > 180:
                 path.unlink(missing_ok=True)
 
     def run(self):
@@ -180,6 +213,10 @@ class Service:
         if self.settings.captures == Path("/share/ring_face/capture") and not share_mount_present():
             raise RuntimeError("share_mount_missing: /share must be mounted by Supervisor; update the app with share read/write access")
         prepare_capture_directory(self.settings.captures)
+        work=self.settings.data/"video_work"
+        if work.is_symlink():raise RuntimeError("Unsafe private video work directory")
+        for abandoned in work.glob("*.mp4"):
+            abandoned.unlink(missing_ok=True)
         LOG.info(json.dumps({"event":"capture_directory_ready", "path":str(self.settings.captures),
                              "directory_mode":"1777", "capture_timeout":self.settings.capture_timeout}))
         self.maintenance()

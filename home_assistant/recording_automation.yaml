@@ -1,0 +1,62 @@
+# Replace the old capture automation. Requires app 0.2.0 and HA Downloader.
+alias: Ring Face - process completed recording
+mode: queued
+max: 2
+max_exceeded: silent
+triggers:
+  - trigger: state
+    entity_id: camera.doorbell_camera_live_view
+    attribute: last_video_id
+conditions:
+  - condition: template
+    value_template: >-
+      {{ trigger.from_state is not none and trigger.to_state is not none and
+         trigger.from_state.state not in ['unknown', 'unavailable'] and
+         trigger.to_state.attributes.get('last_video_id') is not none and
+         trigger.to_state.attributes.get('last_video_id') !=
+           trigger.from_state.attributes.get('last_video_id') }}
+actions:
+  - variables:
+      recording_id: >-
+        {{ trigger.to_state.attributes.get('last_video_id')
+           if trigger is defined and trigger.to_state is defined and trigger.to_state is not none
+           else state_attr('camera.doorbell_camera_live_view', 'last_video_id') }}
+      recording_url: >-
+        {{ trigger.to_state.attributes.get('video_url')
+           if trigger is defined and trigger.to_state is defined and trigger.to_state is not none
+           else state_attr('camera.doorbell_camera_live_view', 'video_url') }}
+  - delay: "00:00:02"
+  - variables:
+      recording_at: "{{ states('sensor.front_porch_front_door_last_recording') }}"
+      event_id: "ring_recording_{{ recording_id }}"
+      downloaded_at: "{{ now().isoformat() }}"
+      filename: "ring_recording_{{ recording_id }}_1.mp4"
+  - condition: template
+    value_template: >-
+      {{ recording_id | string | regex_match('^[0-9]{1,40}$') and
+         recording_url is string and recording_url.startswith('https://') and
+         as_timestamp(recording_at, 0) >= as_timestamp(now()) - 600 and
+         as_timestamp(recording_at, 0) <= as_timestamp(now()) + 5 }}
+  - action: downloader.download_file
+    data:
+      url: "{{ recording_url }}"
+      subdir: ring_face/capture
+      filename: "{{ filename }}"
+      overwrite: true
+  - action: mqtt.publish
+    data:
+      topic: ring_face_recognition/capture
+      qos: 1
+      retain: false
+      payload: >-
+        {{ {
+          'media_type': 'recording',
+          'event_id': event_id,
+          'source_event_id': event_id,
+          'recording_id': recording_id | string,
+          'recording_at': recording_at,
+          'pressed_at': downloaded_at,
+          'captured_at': downloaded_at,
+          'attempt': 1,
+          'recording_path': '/share/ring_face/capture/' ~ filename
+        } | to_json }}

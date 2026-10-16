@@ -2,7 +2,7 @@
 
 Requires Home Assistant Core **2026.4 or newer** and a current Supervisor.
 
-An experimental **silent**, motion-triggered, local YuNet/SFace recognition app
+An experimental **silent**, event-recording-based, local YuNet/SFace recognition app
 for Generic x86-64 Home Assistant OS. Private enrollment and visitor history use
 Home Assistant ingress and SQLite. Reuses your **existing Mosquitto broker and
 MQTT integration**. No announcements, notifications, continuous video analysis,
@@ -16,24 +16,25 @@ warnings); no observation becomes a verified access event.
 
 ## Update an existing installation
 
-**Latest: 0.1.3** fixes a fast-result race in the HA automation and makes capture
-activity visible even when no-face history is hidden. The latest-capture panel
-shows the app version, MQTT connection, last command and newest outcome. With
-Image days >0, the newest no-face diagnostic picture is retained for at most
-one day (only one such picture), alongside normal visitor retention. Zero still
-disables all image storage. Earlier images deleted by 0.1.2 cannot be recreated.
+**Latest: 0.2.0 — completed Ring recordings.** Investigation of released HA
+Ring code confirmed that `camera.snapshot` uses a cached still extracted from
+recorded video, while live view uses a separate WebRTC path. An empty early
+frame can therefore persist even while Ring's phone app shows a live visitor.
+Changing face thresholds or retrying that same snapshot does not fix the source.
 
-**Update the app and replace your automation** using
-[the 0.1.3 recovery guide](docs/CAPTURE_RECOVERY.md). The automation handles motion
-and bell presses in one workflow, waits two seconds for an approach, and retries
-empty/failed frames up to three times under one event ID. It checks persistent
-MQTT sensor attributes rather than subscribing for a result after publishing.
+Use [the full recording setup guide](docs/RING_RECORDINGS.md) and
+[recording_automation.yaml](home_assistant/recording_automation.yaml), with your
+confirmed `sensor.front_porch_front_door_last_recording`. HA's Downloader saves
+completed video into `/share`; the app samples up to five frames locally and
+retains the selected JPEG. It processes new completed recordings, so it is
+**delayed visitor recognition, not live recognition**. Existing snapshot commands
+remain compatible, but the older snapshot automation is not the recommended
+Ring source. Disable it when enabling the recording automation.
 
-**0.1.1 fixes snapshot handoff:** explicit shared mount and directory permissions,
-a configurable `capture_timeout: 10`, matching camera/MQTT filenames, complete
-image checks, and specific diagnostics. Follow the complete
-[0.1.1 update and verification guide](docs/SNAPSHOT_HANDOFF.md). Update both the
-app **and** your HA automation; keep your existing MQTT credentials and app data.
+Image days >0 is required for viewable retained pictures. One newest no-face
+picture is kept for up to one day; ordinary visitor history stays uncluttered.
+History, enrollment and MQTT credentials survive a normal update. No new broker,
+AI service, Ring login in this app, or unlocking capability is introduced.
 
 ## Installation on your HAOS laptop
 
@@ -87,6 +88,11 @@ app **and** your HA automation; keep your existing MQTT credentials and app data
    exactly one clear face per photo, varied angles and lighting. Photos are
    discarded after normalized templates are extracted. Replace templates to
    retrain; deleting a person deletes templates. Trusted is informational only.
+For the recommended recording workflow, continue with
+[docs/RING_RECORDINGS.md](docs/RING_RECORDINGS.md) after enrollment. The following
+snapshot-package instructions are retained for compatibility and diagnosis; they
+cannot make native Ring snapshots into live frames.
+
 6. Copy [home_assistant/ring_face_package.yaml](home_assistant/ring_face_package.yaml)
    to `/config/packages/ring_face.yaml`. Merge this into your existing
    `homeassistant:` section of `/config/configuration.yaml` if packages are not
@@ -233,7 +239,7 @@ python3 scripts/fetch_sample.py /tmp/ring-lena.jpg
 .venv/bin/python scripts/check.py
 RING_TEST_MODELS=/tmp/ring-models RING_TEST_IMAGE=/tmp/ring-lena.jpg .venv/bin/pytest -q
 .venv/bin/python scripts/benchmark.py --models /tmp/ring-models --image /tmp/ring-lena.jpg
-docker build --platform linux/amd64 -t ring-face:0.1.3 ring_face
+docker build --platform linux/amd64 -t ring-face:0.2.0 ring_face
 ```
 
 Model fetches require `media.githubusercontent.com`, packages use PyPI, the

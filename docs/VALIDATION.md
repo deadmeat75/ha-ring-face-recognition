@@ -1,7 +1,7 @@
 # Validation record
 
-Executed in this Linux amd64 cloud workspace, 2026-10-15 (America/Los_Angeles).
-Updated for app version 0.1.3. This is development
+Executed in this Linux amd64 cloud workspace, 2026-10-16 (UTC).
+Updated for app version 0.2.0. This is development
 validation, not a claim of installation on the owner's HAOS laptop.
 
 | Check | Outcome |
@@ -11,7 +11,7 @@ validation, not a claim of installation on the owner's HAOS laptop.
 | Model provenance and acquisition | PASS; upstream Git LFS size/hash matched both downloaded ONNX files |
 | Actual model tests | PASS; no-face image, single face with 128-float embedding, repeat matching, two-face ambiguity |
 | Real-photo enrollment → recognition → private history | PASS; varied synthetic transformations of a public sample, real YuNet/SFace, actual SQLite and Flask routes |
-| Automated suite | 61 passed, 1 skipped (existing live MQTT broker unavailable in cloud) |
+| Automated suite | 76 passed, 1 skipped (existing live MQTT broker unavailable in cloud) |
 | MQTT discovery | PASS; five stable unique IDs, desired entity IDs, availability, expiration, JSON structure, Jinja rendering, reconnect/HA birth callbacks, no templates in payloads |
 | SQLite / restart / migrations | PASS; persisted event deduplication, reopening DB, schema v1→v2 migration, rejecting future schema, deletion and retention |
 | Security and recovery checks | PASS; ingress peer enforcement, forwarded-header rejection, CSRF, upload limits/type/quality validation, path/symlink/FIFO protection, bounded queue, engine timeout termination, invalid/repeated images, source metadata diagnostics |
@@ -19,6 +19,10 @@ validation, not a claim of installation on the owner's HAOS laptop.
 | Runtime container functional test | PASS; actual model → event → SQLite → authenticated history, direct access rejected, 1 CPU and 384 MiB limit, exit 0, no OOM kill |
 | No-face diagnostics | PASS; only newest no-face image retained up to one day with image retention enabled, older images purged, hidden text history opt-in, latest-capture API independent of filters, zero retention respected |
 | Fast result / motion recovery | PASS; already-received completion attributes satisfy wait immediately, attempt/event gates reject stale results, no-face retries update one event, reused contexts get new source IDs, motion/press share cooldown |
+| Recording container handoff | PASS; separate writer UID 65534 and app UID 0, delayed shared MP4, real face detection and private history in 4009 ms including 3-second write delay; engine peak 175 MiB, cgroup peak 166 MiB, no OOM |
+| Recording extraction | PASS; synthetic MP4 with empty first frame and later public face produces recognized result using real models; invalid/empty/stale/symlink/oversize recordings rejected and private work files cleaned |
+| Recording identity consistency | PASS; empty samples skipped, multiple/uncomparable/inconsistent faces yield ambiguous; no embeddings/URL in persisted metadata |
+| Recording automation contract | PASS; triggers a new ready Ring video ID, downloads to shared MP4, publishes no signed URL, ID/path match checked |
 | Shared snapshot handoff | PASS; separately rendered HA camera/MQTT paths match, delayed writes beyond 2s succeed, default/configured timeout and specific rejections verified |
 | Two-container shared volume | PASS; same `/share` volume, writer UID 65534, app UID 0, image delayed 3 seconds, actual face detection, private retained image, `unknown` record in ~3890 ms |
 | Shared mount detection | PASS; Linux mount table accepts same-device bind mounts, rejects missing/read-only mappings; startup prepares shared permissions under private umask |
@@ -45,13 +49,15 @@ Commands used:
 ```sh
 sh scripts/prepare_cloud.sh
 python scripts/verify_handoff_containers.py --sample /workspace/ring-lena.jpg
+.venv/bin/python scripts/make_test_recording.py --face /workspace/ring-lena.jpg --output /workspace/ring-test-event.mp4
+python scripts/verify_handoff_containers.py --recording --sample /workspace/ring-test-event.mp4
 RING_TEST_MODELS=/workspace/ring-models RING_TEST_IMAGE=/workspace/ring-lena.jpg .venv/bin/python -m pytest -q
 .venv/bin/python scripts/benchmark.py --models /workspace/ring-models --image /workspace/ring-lena.jpg
 .venv/bin/python scripts/benchmark.py --models /workspace/ring-models --image /workspace/ring-large.jpg
 python scripts/build_cloud.py
 ```
 
-For the image smoke test, create a temporary container from `ring-face:0.1.3`
+For the image smoke test, create a temporary container from `ring-face:0.2.0`
 with `--memory=384m --memory-swap=384m --cpus=1 -e PYTHONPATH=/app` and command
 `python /tmp/container_smoke.py`. Copy `scripts/container_smoke.py` to that path
 and the downloaded public sample to `/tmp/sample.jpg` using `docker cp`, start
@@ -107,8 +113,10 @@ real Core service call still needs the live acceptance steps below.
    If using it, supply the named `RING_TEST_MQTT_*` process variables securely,
    without exposing passwords in shell history, source or chat. Test ACLs may
    need a temporary-topic allowance. This test was skipped here.
-4. Follow docs/SNAPSHOT_HANDOFF.md for the 0.1.1 update. Run HA **Check configuration** after merging the package, apply the allowlist,
-   and verify a real press through Ring entities. Confirm the shared directory
+4. Follow docs/RING_RECORDINGS.md for the 0.2.0 update, configure Downloader
+   with base directory `/share`, and install the completed-recording automation.
+   Confirm a fresh saved recording downloads and yields a selected frame.
+   For legacy JPEG tests use docs/SNAPSHOT_HANDOFF.md. Confirm the shared directory
    is actually visible to both Core and the app. Native YAML has not been loaded
    into a live HA Core configuration in this cloud machine.
 5. Open ingress while signed in and confirm unauthenticated HA access fails.

@@ -1,6 +1,6 @@
 """Verify two containers share the same capture file; installs no MQTT broker.
 Usage: python scripts/verify_handoff_containers.py --sample /path/to/public.jpg
-Requires a built ring-face:0.1.3 image. Does not contact Home Assistant or Ring.
+Requires a built ring-face:0.2.0 image. Does not contact Home Assistant or Ring.
 """
 import argparse
 from pathlib import Path
@@ -13,11 +13,11 @@ def docker(*args,**kwargs):
 
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--sample',type=Path,required=True)
+    parser=argparse.ArgumentParser();parser.add_argument('--sample',type=Path,required=True);parser.add_argument('--recording',action='store_true')
     args=parser.parse_args()
     fixture=Path(__file__).with_name('handoff_container_fixture.py')
     volume='ring-face-test-'+uuid.uuid4().hex
-    event_id='handoff_'+uuid.uuid4().hex
+    event_id=('ring_recording_'+str(int(uuid.uuid4().hex,16))) if args.recording else 'handoff_'+uuid.uuid4().hex
     ids=[]
     # docker cp preserves file read permissions, including for the non-root writer.
     fixture.chmod(0o644)
@@ -25,8 +25,8 @@ def main():
     try:
         def create(role,user='0:0'):
             cid=docker('create','--user',user,'--memory=384m','--memory-swap=384m','--cpus=1',
-                       '-v',volume+':/share','-e','PYTHONPATH=/app','ring-face:0.1.3',
-                       'python','/tmp/handoff.py',role,event_id,capture_output=True).stdout.strip()
+                       '-v',volume+':/share','-e','PYTHONPATH=/app','ring-face:0.2.0',
+                       'python','/tmp/handoff.py',role,event_id,*(['recording'] if args.recording else []),capture_output=True).stdout.strip()
             ids.append(cid)
             docker('cp',str(fixture),cid+':/tmp/handoff.py',capture_output=True)
             if role=='write':
@@ -34,7 +34,7 @@ def main():
                 import tempfile
                 with tempfile.NamedTemporaryFile() as copy:
                     copy.write(args.sample.read_bytes());copy.flush();Path(copy.name).chmod(0o644)
-                    docker('cp',copy.name,cid+':/tmp/sample.jpg',capture_output=True)
+                    docker('cp',copy.name,cid+':/tmp/source_media',capture_output=True)
             return cid
         prepare=create('prepare');docker('start','-a',prepare,timeout=30)
         assert docker('inspect','--format','{{.State.ExitCode}}',prepare,capture_output=True).stdout.strip()=='0'
