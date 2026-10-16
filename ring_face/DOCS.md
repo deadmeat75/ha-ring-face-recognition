@@ -34,3 +34,11 @@ history; use Show no-face events and Filter / refresh for diagnostics. Unknown
 visitors with a detected face remain visible and follow Image days retention.
 Enrollment is not required for face detection. Update normally and reopen Web UI;
 no automation changes are required from 0.1.1.
+
+## Capture visibility and result race (0.1.3)
+
+Use the new Latest capture panel to distinguish absent commands, capture errors
+and hidden no-face results. Its status refresh does not trigger the camera.
+With Image days enabled, one newest no-face image is retained for up to one day;
+older no-face pictures are discarded. Update both the app and HA automation,
+as detailed in [Capture recovery](../docs/CAPTURE_RECOVERY.md).

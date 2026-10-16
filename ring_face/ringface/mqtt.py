@@ -26,6 +26,9 @@ def discovery():
             "expire_after":90 if health else 300,
             "device":{"identifiers":["ring_face_front_door"],"name":"Front door","manufacturer":"Ring Face Recognition","model":"YuNet + SFace CPU"},
         }
+        if key == "last_visitor":
+            payload["json_attributes_topic"] = BASE + "/state"
+            payload["json_attributes_template"] = "{{ {'event_id': value_json.event_id, 'attempt': value_json.attempt, 'status': value_json.status, 'freshness': value_json.freshness} | to_json }}"
         if key == "last_seen":
             payload["device_class"] = "timestamp"
         if key == "recognition_confidence":
@@ -60,9 +63,12 @@ class Broker:
 
     def on_connect(self, client, userdata, flags, reason_code, properties):
         if reason_code.is_failure:
+            self.connected = False
+            self.service.mqtt_connected = False
             LOG.warning(json.dumps({"event":"mqtt_auth_or_connection_failed"}))
             return
         self.connected = True
+        self.service.mqtt_connected = True
         client.subscribe([(BASE + "/capture",1),("homeassistant/status",1)])
         self.announce()
 
@@ -77,6 +83,7 @@ class Broker:
 
     def on_disconnect(self, client, userdata, flags, reason_code, properties):
         self.connected = False
+        self.service.mqtt_connected = False
 
     def on_message(self, client, userdata, message):
         if message.topic == "homeassistant/status" and message.payload == b"online":

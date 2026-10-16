@@ -1,3 +1,16 @@
+# 0.1.3
+
+- Fix fast-result loss in the automation: completion checks event/attempt/status attributes
+  on the existing MQTT last-visitor sensor, so already-received results complete immediately.
+- Use timestamp-based source IDs so repeated HA context IDs cannot suppress future motion.
+- Handle motion timestamps and bell presses in one cooldown-limited workflow; delay two
+  seconds for an approach and retry no_face/capture_failed up to three times under one event ID.
+- Show latest capture and MQTT/command status independent of hidden no-face history;
+  automatically refresh status every 10 seconds while the page is visible.
+- Preserve one no-face diagnostic snapshot for up to one day when Image days >0;
+  keep normal history uncluttered, respect disabled image retention and private storage.
+- Preserve successfully captured images on inference errors for diagnosis.
+
 # 0.1.2
 
 - Discard snapshots for no_face results; purge older no_face snapshots on startup/maintenance.

@@ -1,5 +1,5 @@
-# Paste into ONE automation in Home Assistant: Edit in YAML.
-# The package and UI automation are alternatives: enable only one.
+# Replace ONE existing automation. Keep only this capture automation enabled.
+# Requires app 0.1.3 discovery attributes on sensor.front_door_last_visitor.
 id: ring_face_capture_press
 alias: Ring Face - silent capture on motion
 mode: single
@@ -9,6 +9,10 @@ triggers:
     entity_id: sensor.doorbell_camera_last_motion
     not_from: ["unknown", "unavailable"]
     not_to: ["unknown", "unavailable"]
+  - trigger: state
+    entity_id: binary_sensor.doorbell_camera_ding
+    from: "off"
+    to: "on"
 # Do not admit another capture until 60 seconds after the previous start.
 # The existing automation ID is preserved so this replaces the press version.
 conditions:
@@ -23,11 +27,12 @@ conditions:
 actions:
   - variables:
       source_id: >-
-        {{ trigger.to_state.context.id if trigger is defined and
+        {{ trigger.to_state.last_changed.strftime('%Y%m%dT%H%M%S%f') if trigger is defined and
            trigger.to_state is defined and trigger.to_state is not none
            else now().strftime('manual_%Y%m%dT%H%M%S%f') }}
       capture_id: "{{ now().strftime('%Y%m%dT%H%M%S%f') }}_{{ source_id }}"
       pressed_at: "{{ now().isoformat() }}"
+  - delay: "00:00:02"
   - repeat:
       count: 3
       sequence:
@@ -50,19 +55,18 @@ actions:
               {{ {'event_id': capture_id, 'source_event_id': source_id,
                   'pressed_at': pressed_at, 'captured_at': captured_at,
                   'attempt': attempt | int, 'snapshot_path': snapshot_path} | to_json }}
-        - wait_for_trigger:
-            - trigger: mqtt
-              topic: ring_face_recognition/events
-              value_template: "{{ value_json.event_id }}"
-              payload: "{{ capture_id }}"
-          # Covers capture_timeout <=60s + processing_timeout <=60s.
+        # State attributes persist even when the result arrived before this
+        # wait started. A new MQTT listener could miss a fast result.
+        - wait_template: >-
+            {{ state_attr('sensor.front_door_last_visitor', 'event_id') == capture_id and
+               (state_attr('sensor.front_door_last_visitor', 'attempt') | int(0)) >= (attempt | int) }}
           timeout: "00:02:10"
           continue_on_timeout: true
         - if:
             - condition: template
               value_template: >-
-                {{ wait.trigger is not none and
-                   wait.trigger.payload_json.status != 'capture_failed' }}
+                {{ wait.completed and
+                   state_attr('sensor.front_door_last_visitor', 'status') not in ['capture_failed', 'no_face'] }}
           then:
             - stop: Visitor event processed
         - delay: "00:00:03"

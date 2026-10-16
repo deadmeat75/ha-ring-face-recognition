@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 from flask import Flask, abort, jsonify, request, send_file
 from .images import decode
+from . import __version__
 
 
 def create_app(settings, store, engine, service):
@@ -48,6 +49,13 @@ def create_app(settings, store, engine, service):
         return jsonify(csrf=csrf, health=service.health, engine_peak_rss_kib=engine.peak_rss_kib,
                        capture_timeout=settings.capture_timeout, capture_directory=str(settings.captures),
                        history_days=store.setting("history_days",settings.history_days),image_days=store.setting("image_days",settings.image_days))
+
+    @app.get("/api/capture-status")
+    def capture_status():
+        latest = store.latest_event()
+        return jsonify(version=__version__, latest=latest, mqtt_connected=service.mqtt_connected, health=service.health,
+                       last_command_at=service.last_command_at, last_command_result=service.last_command_result,
+                       image_days=store.setting("image_days",settings.image_days))
 
     @app.get("/api/people")
     def people():

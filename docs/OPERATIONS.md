@@ -44,7 +44,7 @@ wait timeout cannot repair a failed `camera.snapshot` service call by itself.
 | Sensors become unavailable after a few minutes | Intentional expiration: live state is not retained. Durable history remains in ingress. Health should update every 30 seconds. |
 | Capture failed | Read the specific error (`missing`, `permission_denied`, `path_mismatch`, `empty`, `invalid_image`, `stale`). Inspect HA automation trace, camera availability, directory allowlist and `/share/ring_face/capture` creation. Start the app before enabling the package. The old `/config/www/ring_test.jpg` is not this app's exchange path. |
 | No event on physical press | Inspect the binary sensor transitions. Use the documented event-entity replacement if required, never both triggers. 0.1.1 also supports Run actions with a unique manual event ID; that tests the snapshot pipeline but not the physical motion trigger. |
-| Capture retries but completed event exists | MQTT result can race the wait subscription. The app deduplicates further attempts. Leftover captures expire automatically. |
+| Capture retries but completed event exists | Update to the 0.1.3 automation, which checks persistent event/attempt attributes rather than a late MQTT listener. Verify sensor.front_door_last_visitor exists with those attributes; adjust the automation if you renamed it. |
 | `capture_failed` after Ring outage | Three attempts are exhausted, or command/file timestamps exceed the bounded window. A later physical press is a new event. Check machine clock synchronization through supported HA settings. |
 | Recognized an old view | Source freshness is unverified. Exact repeated frames are marked repeated, but different encodings can escape hash detection. Check the Ring app for cloud latency; do not use this result for access. |
 | Unknown / no face / ambiguous | Check illumination, face size and framing. A multi-face scene is intentionally ambiguous. Use varied, clear enrollment photos and conservative thresholds. A photograph or mask is not a safe identity factor. |
@@ -57,11 +57,11 @@ wait timeout cannot repair a failed `camera.snapshot` service call by itself.
 
 ## Retention, deletion and backups
 
-History defaults to 30 days, images to zero days. From 0.1.2, no-face snapshots
-are always discarded; existing no-face snapshots are purged at startup or
-maintenance even when image retention is enabled. Their diagnostic records are
-hidden by default, but remain available via **Show no-face events** until normal
-history expiry. Unknown visitors with a detected face are still retained. UI retention settings are
+History defaults to 30 days, images to zero days. From 0.1.3, only the latest no-face diagnostic
+image is kept for up to one day when image retention is enabled; older ones are
+removed. No-face records are hidden from normal history but the Latest capture
+panel always reports the newest outcome. Image days 0 disables diagnostic images
+as well. Unknown visitors with a detected face use normal retention. UI retention settings are
 persistent and override option defaults; use the UI to change them after initial
 setup. A change immediately purges expired images/events, and startup/minute
 maintenance repeats this. Image files have no public URL. Correcting history does

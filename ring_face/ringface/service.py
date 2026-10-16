@@ -31,41 +31,50 @@ class Service:
         self.health = "starting"
         self.thread = None
         self.enqueue_lock = threading.Lock()
+        self.mqtt_connected = False
+        self.last_command_at = None
+        self.last_command_result = "No capture commands received since startup"
+
+    def reject(self, reason):
+        self.last_command_result = reason
+        LOG.info(json.dumps({"event":"command_rejected", "reason":reason}))
+        return False
 
     def submit(self, payload, retained=False):
         # MQTT commands must never be retained. Date and dedup checks survive restarts.
+        self.last_command_at = datetime.now(timezone.utc).isoformat()
         if retained or len(payload) > 2048:
-            return False
+            return self.reject("retained_or_oversized_command")
         try:
             item = json.loads(payload)
             if not isinstance(item,dict):
-                return False
+                return self.reject("invalid_payload")
             for key in ("event_id", "source_event_id"):
                 if not isinstance(item.get(key),str) or not ID.fullmatch(item[key]):
-                    return False
+                    return self.reject("invalid_identifier")
             if type(item.get("attempt")) is not int or not 1 <= item["attempt"] <= 3:
-                return False
+                return self.reject("invalid_attempt")
             epoch = timestamp(item["pressed_at"])
             captured = timestamp(item["captured_at"])
             now = time.time()
             if not now - 300 <= epoch <= now + 5 or not epoch - 5 <= captured <= now + 5:
-                return False
+                return self.reject("expired_or_invalid_command_time")
             item["epoch"], item["capture_epoch"] = epoch, captured
             with self.enqueue_lock:
                 previous = self.store.event(item["event_id"])
-                if previous and (previous["status"] != "capture_failed" or item["attempt"] <= previous["attempt"]):
-                    return False
+                if previous and (previous["status"] not in {"capture_failed", "no_face"} or item["attempt"] <= previous["attempt"]):
+                    return self.reject("duplicate_event_or_attempt")
                 if not previous and self.store.duplicate(item["source_event_id"], epoch):
-                    return False
+                    return self.reject("duplicate_source_or_10_second_debounce")
                 self.queue.put_nowait(item)
+                self.last_command_result = "accepted"
             return True
         except (ValueError, KeyError, TypeError, queue.Full):
-            LOG.warning(json.dumps({"event":"command_rejected"}))
-            return False
+            return self.reject("invalid_payload_or_queue_full")
 
     def process(self, item):
         previous = self.store.event(item["event_id"])
-        if previous and (previous["status"] != "capture_failed" or item["attempt"] <= previous["attempt"]):
+        if previous and (previous["status"] not in {"capture_failed", "no_face"} or item["attempt"] <= previous["attempt"]):
             return
         if not previous and self.store.duplicate(item["source_event_id"], item["epoch"]):
             return
@@ -89,6 +98,11 @@ class Service:
             event["image_metadata"] = json.dumps(metadata)
             if self.store.repeated_image(digest):
                 event["freshness"] = "repeated"
+            # Preserve proof of a successful capture even if model inference fails.
+            if self.store.setting("image_days", self.settings.image_days) > 0:
+                path = self.settings.data / "images" / (event["id"] + ".jpg")
+                path.write_bytes(raw)
+                event["snapshot"] = path.name
             event["status"] = "error"
             result = self.engine.analyze(raw)
             features = result["features"]
@@ -103,10 +117,6 @@ class Service:
                 result.setdefault("warnings",[]).append("Source EXIF time is outside capture window; freshness remains unverified")
             if result.get("warnings"):
                 event["error"] = "; ".join(result["warnings"])
-            if event["status"] != "no_face" and self.store.setting("image_days", self.settings.image_days) > 0:
-                path = self.settings.data / "images" / (event["id"] + ".jpg")
-                path.write_bytes(raw)
-                event["snapshot"] = path.name
         except Exception as e:
             # Deliberately do not log payloads, credentials or image bytes.
             event["error"] = str(e)[:180]
@@ -116,6 +126,10 @@ class Service:
         finally:
             event["duration_ms"] = round((time.monotonic() - started) * 1000)
             self.store.save_event(event)
+            # Keep one short-lived diagnostic no-face image, not an accumulating
+            # empty-porch gallery. An image_days=0 setting remains authoritative.
+            self.store.retention(self.store.setting("history_days",self.settings.history_days),
+                                 self.store.setting("image_days",self.settings.image_days))
             self.health = "inference_error" if event["status"] == "error" else ("capture_failed" if event["status"] == "capture_failed" else "ready")
             path = self.settings.captures / f"{item['event_id']}_{item['attempt']}.jpg"
             try:
@@ -130,7 +144,7 @@ class Service:
     def state(self, event):
         return {"event_id":event["id"], "identity":event["identity"], "status":event["status"],
                 "score":event["score"], "last_seen":event["timestamp"], "freshness":event["freshness"],
-                "trusted":bool(event["trusted"]), "face_count":event["face_count"]}
+                "trusted":bool(event["trusted"]), "face_count":event["face_count"], "attempt":event["attempt"]}
 
     def maintenance(self):
         self.store.retention(self.store.setting("history_days",self.settings.history_days), self.store.setting("image_days",self.settings.image_days))

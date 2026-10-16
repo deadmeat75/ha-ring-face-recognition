@@ -16,11 +16,18 @@ warnings); no observation becomes a verified access event.
 
 ## Update an existing installation
 
-**Latest: 0.1.2** automatically discards no-face snapshots and removes older
-no-face snapshots during startup/maintenance. These diagnostic records are hidden
-from normal history; select **Show no-face events** to inspect them. Unknown
-visitors with a detected face are still retained, even before enrollment. Update
-the app normally; no automation/configuration change is needed from 0.1.1.
+**Latest: 0.1.3** fixes a fast-result race in the HA automation and makes capture
+activity visible even when no-face history is hidden. The latest-capture panel
+shows the app version, MQTT connection, last command and newest outcome. With
+Image days >0, the newest no-face diagnostic picture is retained for at most
+one day (only one such picture), alongside normal visitor retention. Zero still
+disables all image storage. Earlier images deleted by 0.1.2 cannot be recreated.
+
+**Update the app and replace your automation** using
+[the 0.1.3 recovery guide](docs/CAPTURE_RECOVERY.md). The automation handles motion
+and bell presses in one workflow, waits two seconds for an approach, and retries
+empty/failed frames up to three times under one event ID. It checks persistent
+MQTT sensor attributes rather than subscribing for a result after publishing.
 
 **0.1.1 fixes snapshot handoff:** explicit shared mount and directory permissions,
 a configurable `capture_timeout: 10`, matching camera/MQTT filenames, complete
@@ -100,8 +107,8 @@ app **and** your HA automation; keep your existing MQTT credentials and app data
 7. The package now triggers on timestamp changes of
    **`sensor.doorbell_camera_last_motion`** and captures
    `camera.doorbell_camera_live_view`. This is the timestamp sensor confirmed on
-   your installation. If using the binary sensor instead, replace the trigger
-   with `binary_sensor.doorbell_camera_motion` (`off` → `on`). Walking up can
+   your installation. A second trigger uses `binary_sensor.doorbell_camera_ding`
+   (`off` → `on`) so a bell press can also start the same workflow. Walking up can
    therefore trigger recognition when Ring reports motion; no bell press is
    required. Enable motion detection in Ring and check its detection zones.
    There is a **60-second cooldown from the previous capture start**, plus
@@ -122,7 +129,7 @@ app **and** your HA automation; keep your existing MQTT credentials and app data
    pipeline test (0.1.1 supports manual runs with unique IDs). Verify the trace,
    app history and MQTT entities.
    Failed/missing/invalid snapshots retry up to three times. Successful captures
-   stop after the first result. Wait at least 60 seconds and for motion to clear
+   stop after a detected-face result; no_face outcomes may retry. Wait at least 60 seconds and for motion to clear
    before a second test. For press-only operation instead, replace the trigger
    entity with `binary_sensor.doorbell_camera_ding`, or use the documented
    [event trigger alternative](home_assistant/event_trigger_alternative.yaml).
@@ -226,7 +233,7 @@ python3 scripts/fetch_sample.py /tmp/ring-lena.jpg
 .venv/bin/python scripts/check.py
 RING_TEST_MODELS=/tmp/ring-models RING_TEST_IMAGE=/tmp/ring-lena.jpg .venv/bin/pytest -q
 .venv/bin/python scripts/benchmark.py --models /tmp/ring-models --image /tmp/ring-lena.jpg
-docker build --platform linux/amd64 -t ring-face:0.1.2 ring_face
+docker build --platform linux/amd64 -t ring-face:0.1.3 ring_face
 ```
 
 Model fetches require `media.githubusercontent.com`, packages use PyPI, the

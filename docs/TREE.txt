@@ -3,6 +3,7 @@ ha-ring-face-recognition/
   .gitignore
   LICENSE
   README.md
+  docs/CAPTURE_RECOVERY.md
   docs/MODELS.md
   docs/OPERATIONS.md
   docs/SECURITY.md
@@ -48,6 +49,7 @@ ha-ring-face-recognition/
   scripts/prepare_cloud.sh
   scripts/verify_handoff_containers.py
   tests/conftest.py
+  tests/test_capture_completion.py
   tests/test_capture_handoff.py
   tests/test_live_mqtt.py
   tests/test_models.py

@@ -141,10 +141,10 @@ def render_automation(manual=False):
     env.filters['to_json']=json.dumps
     values={'now':lambda:datetime.now(timezone.utc),'repeat':SimpleNamespace(index=2)}
     if not manual:
-        values['trigger']=SimpleNamespace(to_state=SimpleNamespace(context=SimpleNamespace(id='ha_motion_context_012345')))
+        values['trigger']=SimpleNamespace(to_state=SimpleNamespace(context=SimpleNamespace(id='ha_motion_context_012345'),last_changed=datetime.now(timezone.utc)))
     for key,template in automation['actions'][0]['variables'].items():
         values[key]=env.from_string(template).render(**values)
-    sequence=automation['actions'][1]['repeat']['sequence']
+    sequence=next(action['repeat']['sequence'] for action in automation['actions'] if 'repeat' in action)
     for key,template in sequence[0]['variables'].items():
         values[key]=env.from_string(str(template)).render(**values)
     filename=env.from_string(sequence[1]['data']['filename']).render(**values)

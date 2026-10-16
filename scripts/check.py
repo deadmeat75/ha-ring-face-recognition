@@ -18,7 +18,7 @@ assert config['schema']['mqtt_password'] == 'password'
 assert set(config['options']) == set(config['schema'])
 assert config['backup'] == 'cold'
 package = yaml.safe_load((ROOT / 'home_assistant/ring_face_package.yaml').read_text())
-assert len(package['automation'][0]['triggers']) == 1
+assert {t['entity_id'] for t in package['automation'][0]['triggers']} == {'sensor.doorbell_camera_last_motion','binary_sensor.doorbell_camera_ding'}
 assert package['automation'][0]['mode'] == 'single'
 assert yaml.safe_load((ROOT / 'repository.yaml').read_text())['name']
 env = Environment()

@@ -44,3 +44,37 @@ el("enroll").onsubmit=async event=>{event.preventDefault();try{el("message").tex
 el("filter").onsubmit=event=>{event.preventDefault();history().catch(report);};
 el("retention").onsubmit=async event=>{event.preventDefault();try{const f=new FormData(event.target);await api("retention",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({history_days:Number(f.get("history_days")),image_days:Number(f.get("image_days"))})});el("message").textContent="Retention saved and expired images purged.";await history();}catch(e){report(e);}};
 (async()=>{const s=await api("session");csrf=s.csrf;el("health").textContent=`Worker: ${s.health}; snapshot wait: ${s.capture_timeout}s; engine peak: ${(s.engine_peak_rss_kib/1024).toFixed(1)} MiB (engine only)`;el("retention").elements.history_days.value=s.history_days;el("retention").elements.image_days.value=s.image_days;await people();await history();})().catch(report);
+
+let lastCaptureStatus = "";
+let lastHistoryCaptureKey;
+async function refreshCaptureStatus() {
+  const s = await api("capture-status");
+  const key = JSON.stringify(s);
+  if (key === lastCaptureStatus) return;
+  lastCaptureStatus = key;
+  const box = el("capture-status"); box.replaceChildren();
+  const connection = document.createElement("p");
+  connection.textContent = `App ${s.version}; MQTT: ${s.mqtt_connected ? "connected" : "disconnected"}; worker: ${s.health}; last command: ${s.last_command_at ? new Date(s.last_command_at).toLocaleString() : "none since startup"} (${s.last_command_result}).`;
+  box.append(connection);
+  const row = document.createElement("p");
+  const e = s.latest;
+  row.textContent = e ? `Last capture: ${e.local_time} · ${e.status} · ${e.face_count} detected faces${e.error ? " · " + e.error : ""}` : "No capture has reached visitor history yet. Check the HA automation trace if a manual capture produces no command.";
+  box.append(row);
+  if (e && e.status === "no_face") {
+    const note = document.createElement("p");
+    note.textContent = "Capture ran, but the detector found no face. This event is hidden from normal visitor history. Ring may return an early or cached frame; source freshness remains unverified.";
+    box.append(note);
+  }
+  if (e && e.snapshot) button(box, "View latest private snapshot", () => {
+    let img = box.querySelector("img"); if (img) { img.remove(); return; }
+    img = document.createElement("img"); img.src = "api/history/"+encodeURIComponent(e.id)+"/image"; img.alt="Latest capture"; box.append(img);
+  });
+  if (s.image_days === 0) {
+    const note = document.createElement("p"); note.textContent = "Snapshot retention is disabled. Set Image days above 0 to view new pictures."; box.append(note);
+  }
+  const captureKey = e ? JSON.stringify([e.id, e.attempt, e.status, e.snapshot]) : null;
+  if (lastHistoryCaptureKey !== undefined && lastHistoryCaptureKey !== captureKey) await history();
+  lastHistoryCaptureKey = captureKey;
+}
+refreshCaptureStatus().catch(report);
+setInterval(() => { if (!document.hidden) refreshCaptureStatus().catch(report); }, 10000);
