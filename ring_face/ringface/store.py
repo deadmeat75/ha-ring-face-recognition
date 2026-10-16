@@ -83,8 +83,10 @@ class Store:
             columns = list(event)
             self.db.execute("INSERT OR REPLACE INTO events (" + ",".join(columns) + ") VALUES (" + ",".join("?" for _ in columns) + ")", tuple(event.values()))
 
-    def history(self, person=None, start=None, end=None):
+    def history(self, person=None, start=None, end=None, include_no_face=True):
         clauses, args = [], []
+        if not include_no_face:
+            clauses.append("status != 'no_face'")
         for value, clause in [(person,"person_id=?"), (start,"timestamp>=?"), (end,"timestamp<=?")]:
             if value:
                 clauses.append(clause)
@@ -109,8 +111,8 @@ class Store:
     def retention(self, history_days, image_days):
         now = time.time()
         with self.lock, self.db:
-            for e in self.db.execute("SELECT id,snapshot,epoch FROM events").fetchall():
-                if e["snapshot"] and (image_days == 0 or e["epoch"] < now - image_days * 86400):
+            for e in self.db.execute("SELECT id,snapshot,epoch,status FROM events").fetchall():
+                if e["snapshot"] and (e["status"] == "no_face" or image_days == 0 or e["epoch"] < now - image_days * 86400):
                     (self.data / "images" / e["snapshot"]).unlink(missing_ok=True)
                     self.db.execute("UPDATE events SET snapshot=NULL WHERE id=?", (e["id"],))
                 if e["epoch"] < now - history_days * 86400:

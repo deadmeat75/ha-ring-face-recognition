@@ -52,6 +52,7 @@ ha-ring-face-recognition/
   tests/test_live_mqtt.py
   tests/test_models.py
   tests/test_mqtt.py
+  tests/test_no_face_cleanup.py
   tests/test_recovery.py
   tests/test_service.py
   tests/test_web_store.py

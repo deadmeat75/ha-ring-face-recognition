@@ -1,3 +1,10 @@
+# 0.1.2
+
+- Discard snapshots for no_face results; purge older no_face snapshots on startup/maintenance.
+- Hide no_face diagnostic records from normal visitor history, with an explicit Show no-face events checkbox.
+- Apply filtering before the history query limit so empty-porch events do not crowd out visitors.
+- Keep unknown detected faces, recognition errors, people and enrollment templates unchanged.
+
 # 0.1.1
 
 - Require the actual Supervisor /share mount and declare its explicit read/write path.

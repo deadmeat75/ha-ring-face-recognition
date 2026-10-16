@@ -101,7 +101,8 @@ def create_app(settings, store, engine, service):
         for value in (start,end):
             if value:
                 date.fromisoformat(value)
-        return jsonify(store.history(request.args.get("person"),start,end + "T23:59:59.999999+00:00" if end else None))
+        return jsonify(store.history(request.args.get("person"),start,end + "T23:59:59.999999+00:00" if end else None,
+                                     include_no_face=request.args.get("include_no_face") == "true"))
 
     @app.patch("/api/history/<event_id>")
     def correct(event_id):

@@ -16,6 +16,12 @@ warnings); no observation becomes a verified access event.
 
 ## Update an existing installation
 
+**Latest: 0.1.2** automatically discards no-face snapshots and removes older
+no-face snapshots during startup/maintenance. These diagnostic records are hidden
+from normal history; select **Show no-face events** to inspect them. Unknown
+visitors with a detected face are still retained, even before enrollment. Update
+the app normally; no automation/configuration change is needed from 0.1.1.
+
 **0.1.1 fixes snapshot handoff:** explicit shared mount and directory permissions,
 a configurable `capture_timeout: 10`, matching camera/MQTT filenames, complete
 image checks, and specific diagnostics. Follow the complete
@@ -220,7 +226,7 @@ python3 scripts/fetch_sample.py /tmp/ring-lena.jpg
 .venv/bin/python scripts/check.py
 RING_TEST_MODELS=/tmp/ring-models RING_TEST_IMAGE=/tmp/ring-lena.jpg .venv/bin/pytest -q
 .venv/bin/python scripts/benchmark.py --models /tmp/ring-models --image /tmp/ring-lena.jpg
-docker build --platform linux/amd64 -t ring-face:0.1.1 ring_face
+docker build --platform linux/amd64 -t ring-face:0.1.2 ring_face
 ```
 
 Model fetches require `media.githubusercontent.com`, packages use PyPI, the

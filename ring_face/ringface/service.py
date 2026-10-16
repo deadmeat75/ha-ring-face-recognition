@@ -103,7 +103,7 @@ class Service:
                 result.setdefault("warnings",[]).append("Source EXIF time is outside capture window; freshness remains unverified")
             if result.get("warnings"):
                 event["error"] = "; ".join(result["warnings"])
-            if self.store.setting("image_days", self.settings.image_days) > 0:
+            if event["status"] != "no_face" and self.store.setting("image_days", self.settings.image_days) > 0:
                 path = self.settings.data / "images" / (event["id"] + ".jpg")
                 path.write_bytes(raw)
                 event["snapshot"] = path.name

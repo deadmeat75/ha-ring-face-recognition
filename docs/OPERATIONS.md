@@ -57,7 +57,11 @@ wait timeout cannot repair a failed `camera.snapshot` service call by itself.
 
 ## Retention, deletion and backups
 
-History defaults to 30 days, images to zero days. UI retention settings are
+History defaults to 30 days, images to zero days. From 0.1.2, no-face snapshots
+are always discarded; existing no-face snapshots are purged at startup or
+maintenance even when image retention is enabled. Their diagnostic records are
+hidden by default, but remain available via **Show no-face events** until normal
+history expiry. Unknown visitors with a detected face are still retained. UI retention settings are
 persistent and override option defaults; use the UI to change them after initial
 setup. A change immediately purges expired images/events, and startup/minute
 maintenance repeats this. Image files have no public URL. Correcting history does

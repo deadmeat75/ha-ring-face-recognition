@@ -1,7 +1,7 @@
 # Validation record
 
 Executed in this Linux amd64 cloud workspace, 2026-10-15 (America/Los_Angeles).
-Updated for app version 0.1.1. This is development
+Updated for app version 0.1.2. This is development
 validation, not a claim of installation on the owner's HAOS laptop.
 
 | Check | Outcome |
@@ -11,12 +11,13 @@ validation, not a claim of installation on the owner's HAOS laptop.
 | Model provenance and acquisition | PASS; upstream Git LFS size/hash matched both downloaded ONNX files |
 | Actual model tests | PASS; no-face image, single face with 128-float embedding, repeat matching, two-face ambiguity |
 | Real-photo enrollment → recognition → private history | PASS; varied synthetic transformations of a public sample, real YuNet/SFace, actual SQLite and Flask routes |
-| Automated suite | 52 passed, 1 skipped (existing live MQTT broker unavailable in cloud) |
+| Automated suite | 54 passed, 1 skipped (existing live MQTT broker unavailable in cloud) |
 | MQTT discovery | PASS; five stable unique IDs, desired entity IDs, availability, expiration, JSON structure, Jinja rendering, reconnect/HA birth callbacks, no templates in payloads |
 | SQLite / restart / migrations | PASS; persisted event deduplication, reopening DB, schema v1→v2 migration, rejecting future schema, deletion and retention |
 | Security and recovery checks | PASS; ingress peer enforcement, forwarded-header rejection, CSRF, upload limits/type/quality validation, path/symlink/FIFO protection, bounded queue, engine timeout termination, invalid/repeated images, source metadata diagnostics |
 | Full image build | PASS; final `linux/amd64` Python Debian image, model files and license notices included |
 | Runtime container functional test | PASS; actual model → event → SQLite → authenticated history, direct access rejected, 1 CPU and 384 MiB limit, exit 0, no OOM kill |
+| No-face cleanup | PASS; no-face images never retained, older no-face images purged, diagnostic history opt-in; unknown faces retained before enrollment |
 | Shared snapshot handoff | PASS; separately rendered HA camera/MQTT paths match, delayed writes beyond 2s succeed, default/configured timeout and specific rejections verified |
 | Two-container shared volume | PASS; same `/share` volume, writer UID 65534, app UID 0, image delayed 3 seconds, actual face detection, private retained image, `unknown` record in ~3890 ms |
 | Shared mount detection | PASS; Linux mount table accepts same-device bind mounts, rejects missing/read-only mappings; startup prepares shared permissions under private umask |
@@ -49,7 +50,7 @@ RING_TEST_MODELS=/workspace/ring-models RING_TEST_IMAGE=/workspace/ring-lena.jpg
 python scripts/build_cloud.py
 ```
 
-For the image smoke test, create a temporary container from `ring-face:0.1.1`
+For the image smoke test, create a temporary container from `ring-face:0.1.2`
 with `--memory=384m --memory-swap=384m --cpus=1 -e PYTHONPATH=/app` and command
 `python /tmp/container_smoke.py`. Copy `scripts/container_smoke.py` to that path
 and the downloaded public sample to `/tmp/sample.jpg` using `docker cp`, start

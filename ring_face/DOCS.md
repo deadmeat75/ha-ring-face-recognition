@@ -25,3 +25,12 @@ from `processing_timeout`, which bounds model initialization/inference. Update
 your HA automation and snapshot directory allowlist as described in
 [Snapshot update and verification](../docs/SNAPSHOT_HANDOFF.md). Private visitor
 history and enrollment data survive an ordinary app update; do not uninstall.
+
+## No-face cleanup (0.1.2)
+
+Empty-porch/no_face snapshots are discarded automatically, including previously
+retained ones at startup/maintenance. Their text records are hidden from normal
+history; use Show no-face events and Filter / refresh for diagnostics. Unknown
+visitors with a detected face remain visible and follow Image days retention.
+Enrollment is not required for face detection. Update normally and reopen Web UI;
+no automation changes are required from 0.1.1.
